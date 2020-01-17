@@ -97,13 +97,13 @@ int main(int argc, char **argv)
 
   octomapPub = nh.advertise<octomap_msgs::Octomap>("octomap", 1);
 
-  message_filters::Subscriber<sensor_msgs::PointCloud2> depthCloudSub(nh, PC_TOPIC, 10);
-  tf2_ros::MessageFilter<sensor_msgs::PointCloud2> tfCloudFilter(depthCloudSub, tfBuffer, MAP_FRAME, 10, nh);
-  message_filters::Cache<sensor_msgs::PointCloud2> cloudCache(tfCloudFilter, 1);
+  message_filters::Subscriber<sensor_msgs::PointCloud2> depthCloudSub(nh, PC_TOPIC, 1);
+  //tf2_ros::MessageFilter<sensor_msgs::PointCloud2> tfCloudFilter(depthCloudSub, tfBuffer, MAP_FRAME, 1, nh);
+  //message_filters::Cache<sensor_msgs::PointCloud2> cloudCache(tfCloudFilter, 1);
 
-  //depthCloudSub.registerCallback(registerNewScan);
+  depthCloudSub.registerCallback(registerNewScan);
   //tfCloudFilter.registerCallback(registerNewScan);
-  cloudCache.registerCallback(registerNewScan);
+  //cloudCache.registerCallback(registerNewScan);
 
   for (ros::Rate rate(1); ros::ok(); rate.sleep())
   {
