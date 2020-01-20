@@ -1,0 +1,9 @@
+<library path="lib/libroioctree_rviz_plugin">
+  <class name="roioctree_rviz_plugin/RoiOcTreeDisplay"
+         type="roioctree_rviz_plugin::RoiOcTreeDisplay"
+         base_class_type="rviz::Display">
+    <description>
+      Displays ROI octree.
+    </description>
+  </class>
+</library>

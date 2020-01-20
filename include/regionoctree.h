@@ -16,6 +16,7 @@ public:
   {
   public:
     Region(const std::string &name, int priority) : name(name), priority(priority) {}
+
   private:
     std::string name;
     int priority;

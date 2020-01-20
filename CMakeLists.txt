@@ -7,12 +7,28 @@ add_compile_options(-std=c++11)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS roscpp tf2_ros tf2_geometry_msgs tf2_sensor_msgs sensor_msgs geometry_msgs message_filters octomap_ros octomap_msgs)
+find_package(catkin REQUIRED COMPONENTS roscpp tf2_ros tf2_geometry_msgs tf2_sensor_msgs sensor_msgs geometry_msgs message_filters octomap_ros octomap_msgs rviz octomap_rviz_plugins instance_segmentation_msgs)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 find_package(octomap REQUIRED)
 
+## This setting causes Qt's "MOC" generation to happen automatically.
+set(CMAKE_AUTOMOC ON)
+
+## This plugin includes Qt widgets, so we must include Qt.
+## We'll use the version that rviz used so they are compatible.
+if(rviz_QT_VERSION VERSION_LESS "5")
+  message(STATUS "Using Qt4 based on the rviz_QT_VERSION: ${rviz_QT_VERSION}")
+  find_package(Qt4 ${rviz_QT_VERSION} EXACT REQUIRED QtCore QtGui)
+  ## pull in all required include dirs, define QT_LIBRARIES, etc.
+  include(${QT_USE_FILE})
+else()
+  message(STATUS "Using Qt5 based on the rviz_QT_VERSION: ${rviz_QT_VERSION}")
+  find_package(Qt5 ${rviz_QT_VERSION} EXACT REQUIRED Core Widgets)
+  ## make target_link_libraries(${QT_LIBRARIES}) pull in all required dependencies
+  set(QT_LIBRARIES Qt5::Widgets)
+endif()
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -101,8 +117,8 @@ find_package(octomap REQUIRED)
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES octomap_vpp
-   CATKIN_DEPENDS roscpp tf2_ros tf2_geometry_msgs tf2_sensor_msgs sensor_msgs geometry_msgs message_filters octomap_ros octomap_msgs
+   LIBRARIES roioctree_rviz_plugin
+   CATKIN_DEPENDS roscpp tf2_ros tf2_geometry_msgs tf2_sensor_msgs sensor_msgs geometry_msgs message_filters octomap_ros octomap_msgs rviz octomap_rviz_plugins instance_segmentation_msgs
 #  DEPENDS system_lib
 )
 
@@ -122,17 +138,20 @@ include_directories(
 # add_library(${PROJECT_NAME}
 #   src/${PROJECT_NAME}/octomap_vpp.cpp
 # )
+add_library(roioctree_rviz_plugin src/roi_octree_display.cpp include/roi_octree_display.h src/roioctree.cpp ${MOC_FILES})
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
 # add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(roioctree_rviz_plugin ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(roioctree_rviz_plugin ${catkin_LIBRARIES} ${QT_LIBRARIES} ${OCTOMAP_LIBRARIES})
 
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/octomap_vpp_node.cpp)
-add_executable(test_node src/test_node.cpp src/regionoctree.cpp)
+add_executable(test_node src/test_node.cpp src/roioctree.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
