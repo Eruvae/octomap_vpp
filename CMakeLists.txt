@@ -7,7 +7,7 @@ add_compile_options(-std=c++11)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS roscpp tf2_ros tf2_geometry_msgs tf2_sensor_msgs sensor_msgs geometry_msgs message_filters octomap_ros octomap_msgs rviz octomap_rviz_plugins instance_segmentation_msgs)
+find_package(catkin REQUIRED COMPONENTS roscpp tf2_ros tf2_geometry_msgs tf2_sensor_msgs sensor_msgs geometry_msgs message_filters octomap_ros octomap_msgs rviz octomap_rviz_plugins instance_segmentation_msgs pointcloud_roi_msgs)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -118,7 +118,7 @@ endif()
 catkin_package(
 #  INCLUDE_DIRS include
    LIBRARIES roioctree_rviz_plugin
-   CATKIN_DEPENDS roscpp tf2_ros tf2_geometry_msgs tf2_sensor_msgs sensor_msgs geometry_msgs message_filters octomap_ros octomap_msgs rviz octomap_rviz_plugins instance_segmentation_msgs
+   CATKIN_DEPENDS roscpp tf2_ros tf2_geometry_msgs tf2_sensor_msgs sensor_msgs geometry_msgs message_filters octomap_ros octomap_msgs rviz octomap_rviz_plugins instance_segmentation_msgs pointcloud_roi_msgs
 #  DEPENDS system_lib
 )
 

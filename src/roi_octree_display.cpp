@@ -108,6 +108,7 @@ void RoiOcTreeDisplay::incomingMessageCallback(const octomap_msgs::OctomapConstP
 
           // the left part evaluates to 1 for free voxels and 2 for occupied voxels
           int cur_node_mode_mask = ((int)octomap->isNodeOccupied(*it) + 1) | ((int)octomap->isNodeROI(*it) << 2);
+          //ROS_INFO_STREAM("CM: " << cur_node_mode_mask << ", RM: " << render_mode_mask << ", " << (cur_node_mode_mask & render_mode_mask) << ", " << octomap->isNodeROI(*it));
           if (cur_node_mode_mask & render_mode_mask)
           {
             // check if current voxel has neighbors on all sides -> no need to be displayed
@@ -139,7 +140,9 @@ void RoiOcTreeDisplay::incomingMessageCallback(const octomap_msgs::OctomapConstP
                     typename RoiOcTree::NodeType* node = octomap->search(key, treeDepth);
 
                     // the left part evaluates to 1 for free voxels and 2 for occupied voxels
-                    if (!(node && ((((int)octomap->isNodeOccupied(node)) + 1) & render_mode_mask)))
+                    int nbNodeMask = ((int)octomap->isNodeOccupied(*it) + 1) | ((int)octomap->isNodeROI(*it) << 2);
+
+                    if (!(node && (nbNodeMask & render_mode_mask)))
                     {
                       // we do not have a neighbor => break!
                       allNeighborsFound = false;

@@ -8,6 +8,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <ros/ros.h>
 
 class RoiOcTreeNode : public octomap::OcTreeNode
 {
@@ -23,6 +24,22 @@ public:
   void copyData(const RoiOcTreeNode& from){
     OcTreeNode::copyData(from);
     roiValue = from.roiValue;
+  }
+
+  std::ostream& writeData(std::ostream &s) const
+  {
+    s.write((const char*) &value, sizeof(value)); // occupancy
+    s.write((const char*) &roiValue, sizeof(roiValue)); // roi value
+
+    return s;
+  }
+
+  std::istream& readData(std::istream &s)
+  {
+    s.read((char*) &value, sizeof(value)); // occupancy
+    s.read((char*) &roiValue, sizeof(roiValue)); // roi value
+
+    return s;
   }
 
   // -- node roi value  ----------------------------
@@ -58,7 +75,7 @@ public:
   /// update this node's occupancy according to its children's maximum occupancy
   inline void updateRoiValChildren()
   {
-    this->setRoiLogOdds(this->getMaxChildRoiLogOdds());  // conservative
+    this->setRoiLogOdds(this->getMeanChildRoiLogOdds());  // conservative
   }
 
   /// adds p to the node's logOdds value (with no boundary / threshold checking!)
@@ -109,6 +126,9 @@ public:
         offRegionNodes.insert(key);
     }
 
+    ROS_INFO_STREAM("Key set sizes: " << regionNodes.size() << ", " << offRegionNodes.size());
+    ROS_INFO_STREAM("Hit/miss prob: " << this->prob_miss_log << ", " << this->prob_hit_log);
+
     for (const octomap::OcTreeKey &key : regionNodes)
     {
       updateNodeRoi(key, true, false);
@@ -134,6 +154,7 @@ public:
 
      bool createdRoot = false;
      if (this->root == NULL){
+       //return leaf; // don't create new nodes
        this->root = new RoiOcTreeNode();
        this->tree_size++;
        createdRoot = true;
@@ -141,6 +162,15 @@ public:
 
      return updateNodeRoiRecurs(this->root, createdRoot, key, 0, log_odds_update, lazy_eval);
    }
+
+  RoiOcTreeNode* updateNodeRoi(const octomap::OcTreeKey& key, bool isRoi, bool lazy_eval)
+  {
+    float logOdds = this->prob_miss_log;
+    if (isRoi)
+      logOdds = this->prob_hit_log;
+
+    return updateNodeRoi(key, logOdds, lazy_eval);
+  }
 
   RoiOcTreeNode* updateNodeRoiRecurs(RoiOcTreeNode* node, bool node_just_created, const octomap::OcTreeKey& key, unsigned int depth, const float& log_odds_update, bool lazy_eval)
   {
@@ -198,7 +228,10 @@ public:
               changed_keys.erase(it);
           }
         } else {
+          float lo_before = node->getRoiLogOdds();
           updateNodeRoiLogOdds(node, log_odds_update);
+          if (log_odds_update > 0)
+            ROS_INFO_STREAM("Updated LOs from " << lo_before << " to " << node->getRoiLogOdds() << " (Prob: " << node->getRoiProb() << "CV: " << log_odds_update << ")");
         }
         return node;
       }
@@ -208,16 +241,18 @@ public:
 
   /// queries whether a node is occupied according to the tree's parameter for "occupancy"
   inline bool isNodeROI(const RoiOcTreeNode* node) const{
-    return (node->getRoiLogOdds() >= this->occ_prob_thres_log);
+    return (node->getRoiLogOdds() >= this->roi_prob_thres_log);
   }
 
   /// queries whether a node is occupied according to the tree's parameter for "occupancy"
   inline bool isNodeROI(const RoiOcTreeNode& node) const{
-    return (node.getRoiLogOdds() >= this->occ_prob_thres_log);
+    return (node.getRoiLogOdds() >= this->roi_prob_thres_log);
   }
 
 
 protected:
+  float roi_prob_thres_log;
+
   /**
    * Static member object which ensures that this OcTree's prototype
    * ends up in the classIDMapping only once. You need this as a

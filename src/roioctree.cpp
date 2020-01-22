@@ -17,9 +17,10 @@ double RoiOcTreeNode::getMeanChildRoiLogOdds() const
       mean /= (double) c;
 
     return log(mean/(1-mean));
-  }
+}
 
-  float RoiOcTreeNode::getMaxChildRoiLogOdds() const{
+float RoiOcTreeNode::getMaxChildRoiLogOdds() const
+{
     float max = -std::numeric_limits<float>::max();
 
     if (children !=NULL){
@@ -34,16 +35,17 @@ double RoiOcTreeNode::getMeanChildRoiLogOdds() const
     return max;
 }
 
-void RoiOcTreeNode::addRoiValue(const float& logOdds) {
+void RoiOcTreeNode::addRoiValue(const float& logOdds)
+{
   roiValue += logOdds;
 }
 
-RoiOcTree::RoiOcTree(double resolution) : octomap::OccupancyOcTreeBase <RoiOcTreeNode>(resolution)
+RoiOcTree::RoiOcTree(double resolution) : octomap::OccupancyOcTreeBase <RoiOcTreeNode>(resolution), roi_prob_thres_log(1)
 {
   ocTreeMemberInit.ensureLinking();
 }
 
-RoiOcTree::RoiOcTree(std::string filename) : octomap::OccupancyOcTreeBase <RoiOcTreeNode>(0.1)
+RoiOcTree::RoiOcTree(std::string filename) : octomap::OccupancyOcTreeBase <RoiOcTreeNode>(0.1), roi_prob_thres_log(1)
 {
   readBinary(filename);
 }
