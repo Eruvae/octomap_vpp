@@ -138,7 +138,7 @@ include_directories(
 # add_library(${PROJECT_NAME}
 #   src/${PROJECT_NAME}/octomap_vpp.cpp
 # )
-add_library(roioctree_rviz_plugin src/roi_octree_display.cpp include/roi_octree_display.h src/roioctree.cpp ${MOC_FILES})
+add_library(roioctree_rviz_plugin src/roi_octree_display.cpp include/roi_octree_display.h src/inflated_roi_octree_display.cpp include/inflated_roi_octree_display.h src/roioctree.cpp src/inflatedroioctree.cpp ${MOC_FILES})
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -151,7 +151,7 @@ target_link_libraries(roioctree_rviz_plugin ${catkin_LIBRARIES} ${QT_LIBRARIES} 
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/octomap_vpp_node.cpp)
-add_executable(test_node src/test_node.cpp src/roioctree.cpp)
+add_executable(test_node src/test_node.cpp src/roioctree.cpp src/inflatedroioctree.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the

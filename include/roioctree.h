@@ -8,7 +8,10 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <queue>
 #include <ros/ros.h>
+
+#include "inflatedroioctree.h"
 
 class RoiOcTreeNode : public octomap::OcTreeNode
 {
@@ -89,8 +92,6 @@ class RoiOcTree : public octomap::OccupancyOcTreeBase <RoiOcTreeNode>
 {
 public:
   RoiOcTree(double resolution);
-
-  RoiOcTree(std::string filename);
 
   virtual RoiOcTree* create() const {return new RoiOcTree(resolution); }
 
@@ -228,14 +229,98 @@ public:
               changed_keys.erase(it);
           }
         } else {
-          float lo_before = node->getRoiLogOdds();
+          //float lo_before = node->getRoiLogOdds();
           updateNodeRoiLogOdds(node, log_odds_update);
-          if (log_odds_update > 0)
-            ROS_INFO_STREAM("Updated LOs from " << lo_before << " to " << node->getRoiLogOdds() << " (Prob: " << node->getRoiProb() << "CV: " << log_odds_update << ")");
+          //if (log_odds_update > 0)
+          //  ROS_INFO_STREAM("Updated LOs from " << lo_before << " to " << node->getRoiLogOdds() << " (Prob: " << node->getRoiProb() << "CV: " << log_odds_update << ")");
         }
         return node;
       }
     }
+
+  std::vector<octomap::OcTreeKey> getRoiKeys()
+  {
+    std::vector<octomap::OcTreeKey> res;
+    for (auto it = this->begin_leafs(), end = this->end_leafs(); it != end; it++)
+    {
+      if(isNodeROI(*it))
+        res.push_back(it.getKey());
+    }
+    return res;
+  }
+
+  InflatedRoiOcTree* getInflatedRois()
+  {
+    std::vector<octomap::OcTreeKey> roiKeys = getRoiKeys();
+    if (roiKeys.size() == 0)
+      return NULL;
+
+    InflatedRoiOcTree *inflatedTree = new InflatedRoiOcTree(this->resolution);
+
+    typedef std::unordered_map<octomap::OcTreeKey, float, octomap::OcTreeKey::KeyHash> KeyFloatMap;
+    typedef std::unordered_set<octomap::OcTreeKey, octomap::OcTreeKey::KeyHash> KeySet;
+
+    KeyFloatMap keyMap;
+    KeySet processedKeys;
+
+    float maxVal = inflatedTree->getMaxRoiVal();
+    float stepReduction = maxVal / inflatedTree->getInfluenceRadius() * inflatedTree->getResolution() ;
+    ROS_INFO_STREAM("Max Val: " << maxVal << "; Step reduction: " << stepReduction);
+    for (const octomap::OcTreeKey &key : roiKeys)
+    {
+      keyMap[key] = maxVal;
+    }
+    while(!keyMap.empty())
+    {
+      KeyFloatMap::iterator maxIt = std::max_element
+      (
+          keyMap.begin(), keyMap.end(),
+          [] (const KeyFloatMap::value_type &p1, const KeyFloatMap::value_type &p2) {
+              return p1.second < p2.second;
+          }
+      );
+      octomap::OcTreeKey curKey = maxIt->first;
+      float curVal = maxIt->second;
+      keyMap.erase(maxIt);
+      inflatedTree->updateNodeVal(curKey, curVal, true);
+      processedKeys.insert(curKey);
+
+      for (int i = -1; i <= 1; i++)
+      {
+        for (int j = -1; j <= 1; j++)
+        {
+          for (int k = -1; k <= 1; k++)
+          {
+            int coordDiff = std::abs(i) + std::abs(j) + std::abs(k);
+            float newNeighbourVal = 0;
+            if (coordDiff == 0) continue; // only process neighbours, not the node itself
+            else if (coordDiff == 1) newNeighbourVal = curVal - stepReduction;
+            else if (coordDiff == 2) newNeighbourVal = curVal - stepReduction * sqrt(2);
+            else /* coordDiff == 3*/ newNeighbourVal = curVal - stepReduction * sqrt(3);
+            if (newNeighbourVal <= 0) continue; // new value is out of influence radius
+
+            octomap::OcTreeKey neighbourKey(curKey[0] + i, curKey[1] + j, curKey[2] + k);
+            if (processedKeys.find(neighbourKey) != processedKeys.end()) continue; // already processed keys can be ignored
+
+            KeyFloatMap::iterator it = keyMap.find(neighbourKey);
+            if (it != keyMap.end()) // key already known, check if update needed
+            {
+              if (newNeighbourVal > it->second) // only update if new value would be higher
+              {
+                it->second = newNeighbourVal;
+              }
+            }
+            else // otherwise, enter new key to map
+            {
+              keyMap[neighbourKey] = newNeighbourVal;
+            }
+          }
+        }
+      }
+    }
+    inflatedTree->updateInnerVals();
+    return inflatedTree;
+  }
 
   void updateNodeRoiLogOdds(RoiOcTreeNode* node, const float& update) const;
 

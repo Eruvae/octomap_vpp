@@ -45,11 +45,6 @@ RoiOcTree::RoiOcTree(double resolution) : octomap::OccupancyOcTreeBase <RoiOcTre
   ocTreeMemberInit.ensureLinking();
 }
 
-RoiOcTree::RoiOcTree(std::string filename) : octomap::OccupancyOcTreeBase <RoiOcTreeNode>(0.1), roi_prob_thres_log(1)
-{
-  readBinary(filename);
-}
-
 RoiOcTree::StaticMemberInitializer RoiOcTree::ocTreeMemberInit;
 
 void RoiOcTree::updateNodeRoiLogOdds(RoiOcTreeNode* node, const float& update) const

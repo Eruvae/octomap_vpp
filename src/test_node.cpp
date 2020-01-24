@@ -22,6 +22,7 @@
 RoiOcTree testTree(0.02);
 tf2_ros::Buffer tfBuffer(ros::Duration(30));
 ros::Publisher octomapPub;
+ros::Publisher inflatedOctomapPub;
 ros::Publisher pcGlobalPub;
 //ros::Publisher planningScenePub;
 
@@ -54,6 +55,21 @@ void publishMap()
   }
   //if (octomap_msgs::binaryMapToMsg(testTree, map_msg))
   //    octomapPub.publish(map_msg);
+  ros::Time inflationStart = ros::Time::now();
+  InflatedRoiOcTree *inflatedTree = testTree.getInflatedRois();
+  ros::Time inflationDone = ros::Time::now();
+  ROS_INFO_STREAM("Time for inflation: " << inflationDone - inflationStart);
+  if (inflatedTree != NULL)
+  {
+    octomap_msgs::Octomap inflated_map;
+    inflated_map.header.frame_id = MAP_FRAME;
+    inflated_map.header.stamp = ros::Time::now();
+    if (octomap_msgs::fullMapToMsg(*inflatedTree, inflated_map))
+    {
+      inflatedOctomapPub.publish(inflated_map);
+    }
+    delete inflatedTree;
+  }
 }
 
 void registerNewScan(const sensor_msgs::PointCloud2ConstPtr &pc_msg)
@@ -160,6 +176,9 @@ void registerRoiPCL(const pointcloud_roi_msgs::PointcloudWithRoi &roi)
   ROS_INFO_STREAM("Cloud sizes: " << inlierCloud.size() << ",  " << outlierCloud.size());
 
   testTree.insertRegionScan(inlierCloud, outlierCloud);
+
+  std::vector<octomap::OcTreeKey> roi_keys = testTree.getRoiKeys();
+  ROS_INFO_STREAM("Found " << roi_keys.size() << " ROI keys");
 }
 
 void registerRoi(const sensor_msgs::PointCloud2ConstPtr &pc_msg, const instance_segmentation_msgs::DetectionsConstPtr &dets_msg)
@@ -217,6 +236,7 @@ int main(int argc, char **argv)
   tf2_ros::TransformListener tfListener(tfBuffer);
 
   octomapPub = nh.advertise<octomap_msgs::Octomap>("octomap", 1);
+  inflatedOctomapPub = nh.advertise<octomap_msgs::Octomap>("inflated_octomap", 1);
   //pcGlobalPub = nh.advertise<sensor_msgs::PointCloud2>(PC_GLOBAL, 1);
   //planningScenePub = nh.advertise<moveit_msgs::PlanningScene>("/planning_scene", 1);
 
