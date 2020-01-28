@@ -13,9 +13,13 @@
 #include <tf2_ros/message_filter.h>
 #include <tf2_sensor_msgs/tf2_sensor_msgs.h>
 //#include <moveit_msgs/PlanningScene.h>
+#include <sensor_msgs/CameraInfo.h>
+#include <image_geometry/pinhole_camera_model.h>
 
 #include <instance_segmentation_msgs/Detections.h>
 #include <pointcloud_roi_msgs/PointcloudWithRoi.h>
+
+#include <boost/thread/mutex.hpp>
 
 #include "roioctree.h"
 
@@ -25,6 +29,8 @@ ros::Publisher octomapPub;
 ros::Publisher inflatedOctomapPub;
 ros::Publisher pcGlobalPub;
 //ros::Publisher planningScenePub;
+
+boost::mutex tree_mtx;
 
 const double OCCUPANCY_THRESH = 0.7;
 const double FREE_THRESH = 0.3;
@@ -48,18 +54,26 @@ void publishMap()
   octomap_msgs::Octomap map_msg;
   map_msg.header.frame_id = MAP_FRAME;
   map_msg.header.stamp = ros::Time::now();
-  if (octomap_msgs::fullMapToMsg(testTree, map_msg))
+  tree_mtx.lock();
+  bool msg_generated = octomap_msgs::fullMapToMsg(testTree, map_msg);
+  tree_mtx.unlock();
+  if (msg_generated)
   {
     octomapPub.publish(map_msg);
     //publishOctomapToPlanningScene(map_msg);
   }
+
   //if (octomap_msgs::binaryMapToMsg(testTree, map_msg))
   //    octomapPub.publish(map_msg);
+
+  tree_mtx.lock();
   ros::Time inflationStart = ros::Time::now();
-  InflatedRoiOcTree *inflatedTree = testTree.getInflatedRois();
+  std::shared_ptr<InflatedRoiOcTree> inflatedTree = testTree.computeInflatedRois();
   ros::Time inflationDone = ros::Time::now();
+  tree_mtx.unlock();
+
   ROS_INFO_STREAM("Time for inflation: " << inflationDone - inflationStart);
-  if (inflatedTree != NULL)
+  if (inflatedTree != nullptr)
   {
     octomap_msgs::Octomap inflated_map;
     inflated_map.header.frame_id = MAP_FRAME;
@@ -68,7 +82,6 @@ void publishMap()
     {
       inflatedOctomapPub.publish(inflated_map);
     }
-    delete inflatedTree;
   }
 }
 
@@ -105,7 +118,9 @@ void registerNewScan(const sensor_msgs::PointCloud2ConstPtr &pc_msg)
 
   ros::Time toOctoTime = ros::Time::now();
 
+  tree_mtx.lock();
   testTree.insertPointCloud(pc, scan_orig);
+  tree_mtx.unlock();
 
   ros::Time insertTime = ros::Time::now();
 
@@ -175,10 +190,12 @@ void registerRoiPCL(const pointcloud_roi_msgs::PointcloudWithRoi &roi)
   pointCloud2ToOctomapByIndices(roi.cloud, roi.roi_indices, inlierCloud, outlierCloud);
   ROS_INFO_STREAM("Cloud sizes: " << inlierCloud.size() << ",  " << outlierCloud.size());
 
+  tree_mtx.lock();
   testTree.insertRegionScan(inlierCloud, outlierCloud);
+  tree_mtx.unlock();
 
-  std::vector<octomap::OcTreeKey> roi_keys = testTree.getRoiKeys();
-  ROS_INFO_STREAM("Found " << roi_keys.size() << " ROI keys");
+  //std::vector<octomap::OcTreeKey> roi_keys = testTree.getRoiKeys();
+  ROS_INFO_STREAM("Found " << testTree.getRoiSize() << " ROI keys (" << testTree.getAddedRoiSize() << " added, " << testTree.getDeletedRoiSize() << " removed)");
 }
 
 void registerRoi(const sensor_msgs::PointCloud2ConstPtr &pc_msg, const instance_segmentation_msgs::DetectionsConstPtr &dets_msg)
@@ -208,7 +225,160 @@ void registerRoi(const sensor_msgs::PointCloud2ConstPtr &pc_msg, const instance_
   pointCloud2ToOctomapByIndices(*pc_msg, inlier_indices, inlierCloud, outlierCloud);
   ROS_INFO_STREAM("Cloud sizes: " << inlierCloud.size() << ",  " << outlierCloud.size());
 
+  tree_mtx.lock();
   testTree.insertRegionScan(inlierCloud, outlierCloud);
+  tree_mtx.unlock();
+}
+
+inline float keyToLogOdds(const octomap::OcTreeKey &key)
+{
+  RoiOcTreeNode *node = testTree.search(key);
+  float logOdds = 0;
+  if (node != NULL)
+    logOdds = node->getLogOdds();
+  return logOdds;
+}
+
+inline double keyToProbability(const octomap::OcTreeKey &key)
+{
+  RoiOcTreeNode *node = testTree.search(key);
+  double p = 0;
+  if (node != NULL)
+    p = node->getOccupancy();
+  return p;
+}
+
+inline double keyToRoiVal(const octomap::OcTreeKey &key)
+{
+  auto inflatedRois = testTree.getInflatedRois(); // must call computeInflatedRois first
+  InflatedRoiOcTreeNode *node = inflatedRois->search(key);
+  double roi_val = 0.0;
+  if (node != NULL)
+    roi_val = node->getValue() / inflatedRois->getMaxRoiVal();
+  return roi_val;
+}
+
+inline double probabilityToEntropy(double p)
+{
+  return -(p*log(p) + (1-p)*log(1-p));
+}
+
+inline double logOddsToEntropy(float logOdds)
+{
+  return probabilityToEntropy(octomap::probability(logOdds));
+}
+
+double computeCellEntropy(const octomap::OcTreeKey &key)
+{
+  RoiOcTreeNode *node = testTree.search(key);
+  double p = 0.5; // defaults to 0.5 if cell not known
+  if (node != NULL)
+    p = node->getOccupancy();
+
+  return probabilityToEntropy(p);
+}
+
+double computeExpectedInformationGain(const octomap::OcTreeKey &key)
+{
+  RoiOcTreeNode *node = testTree.search(key);
+  float hitLog = testTree.getProbHitLog();
+  float missLog = testTree.getProbMissLog();
+  float logOdds = 0;
+  if (node != NULL)
+    logOdds = node->getLogOdds();
+
+  double p = octomap::probability(logOdds);
+  double ent_cur = probabilityToEntropy(p);
+  double ent_hit = logOddsToEntropy(logOdds + hitLog);
+  double ent_miss = logOddsToEntropy(logOdds + missLog);
+
+  return p * abs(ent_hit - ent_cur) + (1-p) * abs(ent_miss - ent_cur);
+}
+
+double computeExpectedInformationGain(float logOdds)
+{
+  float hitLog = testTree.getProbHitLog();
+  float missLog = testTree.getProbMissLog();
+  double p = octomap::probability(logOdds);
+  double ent_cur = probabilityToEntropy(p);
+  double ent_hit = logOddsToEntropy(logOdds + hitLog);
+  double ent_miss = logOddsToEntropy(logOdds + missLog);
+
+  return p * abs(ent_hit - ent_cur) + (1-p) * abs(ent_miss - ent_cur);
+}
+
+double computeExpectedRayInformationGain(const octomap::KeyRay &ray)
+{
+  double expected_gain = 0;
+  double curProb = 1;
+  for (const octomap::OcTreeKey &key : ray)
+  {
+    float logOdds = keyToLogOdds(key);
+    expected_gain += curProb * computeExpectedInformationGain(logOdds);
+    curProb *= octomap::probability(logOdds);
+  }
+  return expected_gain;
+}
+
+double computeWeightedExpectedRayInformationGain(const octomap::KeyRay &ray)
+{
+  double expected_gain = 0;
+  double curProb = 1;
+  for (const octomap::OcTreeKey &key : ray)
+  {
+    float logOdds = keyToLogOdds(key);
+    double roi_val = keyToRoiVal(key);
+    double gain = computeExpectedInformationGain(logOdds);
+    const double ROI_WEIGHT = 0.5;
+    double weightedGain = ROI_WEIGHT * roi_val * gain + (1 - ROI_WEIGHT) * gain;
+    expected_gain += curProb * weightedGain;
+    curProb *= octomap::probability(logOdds);
+  }
+  return expected_gain;
+}
+
+double computeWeightedCellEntropy(const octomap::OcTreeKey &key)
+{
+  double entropy = computeCellEntropy(key);
+  auto inflatedRois = testTree.getInflatedRois(); // must call computeInflatedRois first
+  InflatedRoiOcTreeNode *node = inflatedRois->search(key);
+  double roi_val = 0.0;
+  if (node != NULL)
+    roi_val = node->getValue() / inflatedRois->getMaxRoiVal();
+
+  const double ROI_WEIGHT = 0.5;
+  double weightedEntropy = ROI_WEIGHT * roi_val * entropy + (1 - ROI_WEIGHT) * entropy;
+  return weightedEntropy;
+}
+
+/*double computeViewpointValue(const octomap::pose6d &viewpoint, const image_geometry::PinholeCameraModel &model, const double &minRange, const double &maxRange, size_t xRes, size_t yRes)
+{
+  //cv::Point2d uv;
+  return 0;
+}*/
+
+// make sure x_steps / y_steps equals camera aspect ratio; hfov in rad
+double computeViewpointValue(const octomap::pose6d &viewpoint, const double &hfov, size_t x_steps, size_t y_steps, const double &maxRange)
+{
+  double f_rec =  2 * tan(hfov / 2) / (double)x_steps;
+  double cx = (double)x_steps / 2.0;
+  double cy = (double)y_steps / 2.0;
+  double value = 0;
+  for (size_t i = 0; i < x_steps; i++)
+  {
+    for(size_t j = 0; j < y_steps; j++)
+    {
+      double x = (i + 0.5 - cx) * f_rec;
+      double y = (j + 0.5 - cy) * f_rec;
+      octomap::point3d dir(x, y, 1.0);
+      octomap::point3d end = dir * maxRange;
+      end = viewpoint.transform(end);
+      octomap::KeyRay ray;
+      testTree.computeRayKeys(viewpoint.trans(), end, ray);
+      value += computeWeightedExpectedRayInformationGain(ray);
+    }
+  }
+  return value;
 }
 
 void testRayTrace(const octomap::point3d &orig, const octomap::point3d &end)

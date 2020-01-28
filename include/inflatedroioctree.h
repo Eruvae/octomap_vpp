@@ -42,7 +42,7 @@ public:
 
   virtual std::string getTreeType() const {return "InflatedRoiOcTree";}
 
-  InflatedRoiOcTreeNode* updateNodeVal(const octomap::OcTreeKey& key, float val, bool lazy_eval = false)
+  InflatedRoiOcTreeNode* updateNodeVal(const octomap::OcTreeKey& key, float val, bool lazy_eval = false, bool increase_only = false)
   {
    bool createdRoot = false;
    if (this->root == NULL){
@@ -51,10 +51,10 @@ public:
      createdRoot = true;
    }
 
-   return updateNodeValRecurs(this->root, createdRoot, key, 0, val, lazy_eval);
+   return updateNodeValRecurs(this->root, createdRoot, key, 0, val, lazy_eval, increase_only);
  }
 
-  InflatedRoiOcTreeNode* updateNodeValRecurs(InflatedRoiOcTreeNode* node, bool node_just_created, const octomap::OcTreeKey& key, unsigned int depth, const float& val, bool lazy_eval)
+  InflatedRoiOcTreeNode* updateNodeValRecurs(InflatedRoiOcTreeNode* node, bool node_just_created, const octomap::OcTreeKey& key, unsigned int depth, const float& val, bool lazy_eval, bool increase_only)
   {
     bool created_node = false;
 
@@ -78,9 +78,9 @@ public:
       }
 
       if (lazy_eval)
-        return updateNodeValRecurs(this->getNodeChild(node, pos), created_node, key, depth+1, val, lazy_eval);
+        return updateNodeValRecurs(this->getNodeChild(node, pos), created_node, key, depth+1, val, lazy_eval, increase_only);
       else {
-        InflatedRoiOcTreeNode* retval = updateNodeValRecurs(this->getNodeChild(node, pos), created_node, key, depth+1, val, lazy_eval);
+        InflatedRoiOcTreeNode* retval = updateNodeValRecurs(this->getNodeChild(node, pos), created_node, key, depth+1, val, lazy_eval, increase_only);
         // prune node if possible, otherwise set own probability
         // note: combining both did not lead to a speedup!
         if (this->pruneNode(node)){
@@ -98,7 +98,9 @@ public:
     // at last level, update node, end of recursion
     else
     {
-      node->setValue(val);
+      if (!increase_only || val > node->getValue())
+        node->setValue(val);
+
       return node;
     }
   }

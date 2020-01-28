@@ -4,10 +4,27 @@ project(octomap_vpp)
 ## Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++11)
 
+set (CATKIN_DEPENDENCIES
+    roscpp
+    tf2_ros
+    tf2_geometry_msgs
+    tf2_sensor_msgs
+    sensor_msgs
+    geometry_msgs
+    message_filters
+    octomap_ros
+    octomap_msgs
+    rviz
+    octomap_rviz_plugins
+    instance_segmentation_msgs
+    pointcloud_roi_msgs
+    image_geometry
+)
+
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS roscpp tf2_ros tf2_geometry_msgs tf2_sensor_msgs sensor_msgs geometry_msgs message_filters octomap_ros octomap_msgs rviz octomap_rviz_plugins instance_segmentation_msgs pointcloud_roi_msgs)
+find_package(catkin REQUIRED COMPONENTS ${CATKIN_DEPENDENCIES})
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -118,7 +135,7 @@ endif()
 catkin_package(
 #  INCLUDE_DIRS include
    LIBRARIES roioctree_rviz_plugin
-   CATKIN_DEPENDS roscpp tf2_ros tf2_geometry_msgs tf2_sensor_msgs sensor_msgs geometry_msgs message_filters octomap_ros octomap_msgs rviz octomap_rviz_plugins instance_segmentation_msgs pointcloud_roi_msgs
+   CATKIN_DEPENDS ${CATKIN_DEPENDENCIES}
 #  DEPENDS system_lib
 )
 

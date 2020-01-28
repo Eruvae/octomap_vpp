@@ -215,60 +215,122 @@ public:
 
       // at last level, update node, end of recursion
       else {
-        if (use_change_detection) {
-          bool occBefore = this->isNodeROI(node);
-          updateNodeRoiLogOdds(node, log_odds_update);
+        //if (use_change_detection) {
+        bool roiBefore = this->isNodeROI(node);
+        updateNodeRoiLogOdds(node, log_odds_update);
+        bool roiAfter = this->isNodeROI(node);
 
-          if (node_just_created){  // new node
-            changed_keys.insert(std::pair<octomap::OcTreeKey,bool>(key, true));
-          } else if (occBefore != this->isNodeROI(node)) {  // occupancy changed, track it
-            octomap::KeyBoolMap::iterator it = changed_keys.find(key);
-            if (it == changed_keys.end())
-              changed_keys.insert(std::pair<octomap::OcTreeKey,bool>(key, false));
-            else if (it->second == false)
-              changed_keys.erase(it);
+        if (roiAfter && !roiBefore) // roi added
+        {
+          octomap::KeySet::iterator it = deleted_rois.find(key);
+          if (it != deleted_rois.end())
+          {
+            deleted_rois.erase(it);
           }
+          added_rois.insert(key);
+          roi_keys.insert(key);
+        }
+        else if (!roiAfter && roiBefore) // roi deleted
+        {
+          octomap::KeySet::iterator it = added_rois.find(key);
+          if (it != added_rois.end())
+          {
+            added_rois.erase(it);
+          }
+          deleted_rois.insert(key);
+          it = roi_keys.find(key);
+          if (it != roi_keys.end())
+          {
+            roi_keys.erase(it);
+          }
+        }
+
+        /*if (node_just_created){  // new node
+          changed_keys.insert(std::pair<octomap::OcTreeKey,bool>(key, true));
+        } else if (roiBefore != this->isNodeROI(node)) {  // occupancy changed, track it
+          octomap::KeyBoolMap::iterator it = changed_keys.find(key);
+          if (it == changed_keys.end())
+            changed_keys.insert(std::pair<octomap::OcTreeKey,bool>(key, false));
+          else if (it->second == false)
+            changed_keys.erase(it);
+        }
         } else {
           //float lo_before = node->getRoiLogOdds();
           updateNodeRoiLogOdds(node, log_odds_update);
           //if (log_odds_update > 0)
           //  ROS_INFO_STREAM("Updated LOs from " << lo_before << " to " << node->getRoiLogOdds() << " (Prob: " << node->getRoiProb() << "CV: " << log_odds_update << ")");
-        }
+        }*/
         return node;
       }
     }
 
-  std::vector<octomap::OcTreeKey> getRoiKeys()
+  inline octomap::KeySet getRoiKeys()
   {
-    std::vector<octomap::OcTreeKey> res;
+    /*std::vector<octomap::OcTreeKey> res;
     for (auto it = this->begin_leafs(), end = this->end_leafs(); it != end; it++)
     {
       if(isNodeROI(*it))
         res.push_back(it.getKey());
     }
-    return res;
+    return res;*/
+    return roi_keys;
   }
 
-  InflatedRoiOcTree* getInflatedRois()
-  {
-    std::vector<octomap::OcTreeKey> roiKeys = getRoiKeys();
-    if (roiKeys.size() == 0)
-      return NULL;
+  inline size_t getRoiSize() {return roi_keys.size();}
+  inline size_t getAddedRoiSize() {return added_rois.size();}
+  inline size_t getDeletedRoiSize() {return deleted_rois.size();}
 
-    InflatedRoiOcTree *inflatedTree = new InflatedRoiOcTree(this->resolution);
+  inline std::shared_ptr<InflatedRoiOcTree> getInflatedRois() {return inflated_rois;}
+
+  std::shared_ptr<InflatedRoiOcTree> computeInflatedRois()
+  {
+    //std::vector<octomap::OcTreeKey> roiKeys = getRoiKeys();
+    //if (roi_keys.size() == 0)
+    //  return NULL;
+
+    if (added_rois.empty() && deleted_rois.empty()) // no changes, return existing tree
+      return inflated_rois;
+
+    bool full_construct = false;
+    if (inflated_rois == nullptr || !deleted_rois.empty())
+    {
+      inflated_rois.reset(new InflatedRoiOcTree(this->resolution));
+      full_construct = true;
+    }
+
+    //InflatedRoiOcTree *inflatedTree = new InflatedRoiOcTree(this->resolution);
 
     typedef std::unordered_map<octomap::OcTreeKey, float, octomap::OcTreeKey::KeyHash> KeyFloatMap;
     typedef std::unordered_set<octomap::OcTreeKey, octomap::OcTreeKey::KeyHash> KeySet;
 
+    /*struct cmp_fkey_pair {
+      bool operator() (const std::pair<float, octomap::OcTreeKey>& lhs, const std::pair<float, octomap::OcTreeKey>& rhs) const
+      {return lhs.first > rhs.first;}
+    };
+    typedef std::set<std::pair<float, octomap::OcTreeKey>, cmp_fkey_pair> SortedFloatKeySet;*/
+
     KeyFloatMap keyMap;
+    //SortedFloatKeySet floatKeySet;
     KeySet processedKeys;
 
-    float maxVal = inflatedTree->getMaxRoiVal();
-    float stepReduction = maxVal / inflatedTree->getInfluenceRadius() * inflatedTree->getResolution() ;
+    float maxVal = inflated_rois->getMaxRoiVal();
+    float stepReduction = maxVal / inflated_rois->getInfluenceRadius() * inflated_rois->getResolution() ;
     ROS_INFO_STREAM("Max Val: " << maxVal << "; Step reduction: " << stepReduction);
-    for (const octomap::OcTreeKey &key : roiKeys)
+    if (full_construct)
     {
-      keyMap[key] = maxVal;
+      for (const octomap::OcTreeKey &key : roi_keys)
+      {
+        keyMap[key] = maxVal;
+        //floatKeySet.insert(std::make_pair(maxVal, key));
+      }
+    }
+    else // only use added rois for update
+    {
+      for (const octomap::OcTreeKey &key : added_rois)
+      {
+        keyMap[key] = maxVal;
+        //floatKeySet.insert(std::make_pair(maxVal, key));
+      }
     }
     while(!keyMap.empty())
     {
@@ -282,8 +344,15 @@ public:
       octomap::OcTreeKey curKey = maxIt->first;
       float curVal = maxIt->second;
       keyMap.erase(maxIt);
-      inflatedTree->updateNodeVal(curKey, curVal, true);
+      inflated_rois->updateNodeVal(curKey, curVal, true, !full_construct);
       processedKeys.insert(curKey);
+      /*SortedFloatKeySet::iterator maxIt = floatKeySet.begin();
+      octomap::OcTreeKey curKey = maxIt->second;
+      float curVal = maxIt->first;
+      floatKeySet.erase(maxIt);
+      keyMap.erase(curKey);
+      inflated_rois->updateNodeVal(curKey, curVal, true, !full_construct);
+      processedKeys.insert(curKey);*/
 
       for (int i = -1; i <= 1; i++)
       {
@@ -307,19 +376,25 @@ public:
             {
               if (newNeighbourVal > it->second) // only update if new value would be higher
               {
+                //SortedFloatKeySet::iterator set_it = floatKeySet.find(std::make_pair(it->second, it->first));
+                //floatKeySet.erase(set_it);
                 it->second = newNeighbourVal;
+                //floatKeySet.insert(std::make_pair(it->second, it->first));
               }
             }
             else // otherwise, enter new key to map
             {
               keyMap[neighbourKey] = newNeighbourVal;
+              //floatKeySet.insert(std::make_pair(newNeighbourVal, neighbourKey));
             }
           }
         }
       }
     }
-    inflatedTree->updateInnerVals();
-    return inflatedTree;
+    inflated_rois->updateInnerVals();
+    added_rois.clear();
+    deleted_rois.clear();
+    return inflated_rois;
   }
 
   void updateNodeRoiLogOdds(RoiOcTreeNode* node, const float& update) const;
@@ -337,6 +412,11 @@ public:
 
 protected:
   float roi_prob_thres_log;
+  std::shared_ptr<InflatedRoiOcTree> inflated_rois;
+
+  octomap::KeySet added_rois;
+  octomap::KeySet deleted_rois;
+  octomap::KeySet roi_keys;
 
   /**
    * Static member object which ensures that this OcTree's prototype
