@@ -66,6 +66,8 @@
   <depend>instance_segmentation_msgs</depend>
   <depend>pointcloud_roi_msgs</depend>
   <depend>image_geometry</depend>
+  <depend>moveit_ros_planning_interface</depend>
+  <depend>eigen_conversions</depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>

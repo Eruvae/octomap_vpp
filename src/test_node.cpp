@@ -19,9 +19,16 @@
 #include <instance_segmentation_msgs/Detections.h>
 #include <pointcloud_roi_msgs/PointcloudWithRoi.h>
 
+#include <moveit/robot_model_loader/robot_model_loader.h>
+#include <moveit/move_group_interface/move_group_interface.h>
+#include <moveit/planning_interface/planning_interface.h>
+
+#include <eigen_conversions/eigen_msg.h>
+
 #include <boost/thread/mutex.hpp>
 
 #include "roioctree.h"
+#include "roioctree_utils.h"
 
 RoiOcTree testTree(0.02);
 tf2_ros::Buffer tfBuffer(ros::Duration(30));
@@ -99,7 +106,7 @@ void registerNewScan(const sensor_msgs::PointCloud2ConstPtr &pc_msg)
     ROS_ERROR_STREAM("Couldn't find transform to map frame: " << e.what());
     return;
   }
-  ROS_INFO_STREAM("Transform for time " << pc_msg->header.stamp << " successful");
+  //ROS_INFO_STREAM("Transform for time " << pc_msg->header.stamp << " successful");
 
   const geometry_msgs::Vector3 &pcfOrig = pcFrameTf.transform.translation;
   octomap::point3d scan_orig(pcfOrig.x, pcfOrig.y, pcfOrig.z);
@@ -149,7 +156,7 @@ void pointCloud2ToOctomapByIndices(const sensor_msgs::PointCloud2 &cloud, const 
      else
        invalid_points++;
    }
-   ROS_INFO_STREAM("Number of invalid points: " << invalid_points);
+   //ROS_INFO_STREAM("Number of invalid points: " << invalid_points);
 }
 
 // indices must be ordered!
@@ -181,26 +188,26 @@ void pointCloud2ToOctomapByIndices(const sensor_msgs::PointCloud2 &cloud, const 
      else
        invalid_points++;
    }
-   ROS_INFO_STREAM("Number of invalid points: " << invalid_points);
+   //ROS_INFO_STREAM("Number of invalid points: " << invalid_points);
 }
 
 void registerRoiPCL(const pointcloud_roi_msgs::PointcloudWithRoi &roi)
 {
   octomap::Pointcloud inlierCloud, outlierCloud;
   pointCloud2ToOctomapByIndices(roi.cloud, roi.roi_indices, inlierCloud, outlierCloud);
-  ROS_INFO_STREAM("Cloud sizes: " << inlierCloud.size() << ",  " << outlierCloud.size());
+  //ROS_INFO_STREAM("Cloud sizes: " << inlierCloud.size() << ",  " << outlierCloud.size());
 
   tree_mtx.lock();
   testTree.insertRegionScan(inlierCloud, outlierCloud);
   tree_mtx.unlock();
 
   //std::vector<octomap::OcTreeKey> roi_keys = testTree.getRoiKeys();
-  ROS_INFO_STREAM("Found " << testTree.getRoiSize() << " ROI keys (" << testTree.getAddedRoiSize() << " added, " << testTree.getDeletedRoiSize() << " removed)");
+  //ROS_INFO_STREAM("Found " << testTree.getRoiSize() << " ROI keys (" << testTree.getAddedRoiSize() << " added, " << testTree.getDeletedRoiSize() << " removed)");
 }
 
 void registerRoi(const sensor_msgs::PointCloud2ConstPtr &pc_msg, const instance_segmentation_msgs::DetectionsConstPtr &dets_msg)
 {
-  ROS_INFO_STREAM("Register ROI called, " << dets_msg->detections.size() << " detections");
+  //ROS_INFO_STREAM("Register ROI called, " << dets_msg->detections.size() << " detections");
   std::unordered_set<size_t> inlier_indices;
   for (const auto &det : dets_msg->detections)
   {
@@ -219,166 +226,15 @@ void registerRoi(const sensor_msgs::PointCloud2ConstPtr &pc_msg, const instance_
     }
   }
 
-  ROS_INFO_STREAM("Number of inliers: " << inlier_indices.size());
+  //ROS_INFO_STREAM("Number of inliers: " << inlier_indices.size());
 
   octomap::Pointcloud inlierCloud, outlierCloud;
   pointCloud2ToOctomapByIndices(*pc_msg, inlier_indices, inlierCloud, outlierCloud);
-  ROS_INFO_STREAM("Cloud sizes: " << inlierCloud.size() << ",  " << outlierCloud.size());
+  //ROS_INFO_STREAM("Cloud sizes: " << inlierCloud.size() << ",  " << outlierCloud.size());
 
   tree_mtx.lock();
   testTree.insertRegionScan(inlierCloud, outlierCloud);
   tree_mtx.unlock();
-}
-
-inline float keyToLogOdds(const octomap::OcTreeKey &key)
-{
-  RoiOcTreeNode *node = testTree.search(key);
-  float logOdds = 0;
-  if (node != NULL)
-    logOdds = node->getLogOdds();
-  return logOdds;
-}
-
-inline double keyToProbability(const octomap::OcTreeKey &key)
-{
-  RoiOcTreeNode *node = testTree.search(key);
-  double p = 0;
-  if (node != NULL)
-    p = node->getOccupancy();
-  return p;
-}
-
-inline double keyToRoiVal(const octomap::OcTreeKey &key)
-{
-  auto inflatedRois = testTree.getInflatedRois(); // must call computeInflatedRois first
-  InflatedRoiOcTreeNode *node = inflatedRois->search(key);
-  double roi_val = 0.0;
-  if (node != NULL)
-    roi_val = node->getValue() / inflatedRois->getMaxRoiVal();
-  return roi_val;
-}
-
-inline double probabilityToEntropy(double p)
-{
-  return -(p*log(p) + (1-p)*log(1-p));
-}
-
-inline double logOddsToEntropy(float logOdds)
-{
-  return probabilityToEntropy(octomap::probability(logOdds));
-}
-
-double computeCellEntropy(const octomap::OcTreeKey &key)
-{
-  RoiOcTreeNode *node = testTree.search(key);
-  double p = 0.5; // defaults to 0.5 if cell not known
-  if (node != NULL)
-    p = node->getOccupancy();
-
-  return probabilityToEntropy(p);
-}
-
-double computeExpectedInformationGain(const octomap::OcTreeKey &key)
-{
-  RoiOcTreeNode *node = testTree.search(key);
-  float hitLog = testTree.getProbHitLog();
-  float missLog = testTree.getProbMissLog();
-  float logOdds = 0;
-  if (node != NULL)
-    logOdds = node->getLogOdds();
-
-  double p = octomap::probability(logOdds);
-  double ent_cur = probabilityToEntropy(p);
-  double ent_hit = logOddsToEntropy(logOdds + hitLog);
-  double ent_miss = logOddsToEntropy(logOdds + missLog);
-
-  return p * abs(ent_hit - ent_cur) + (1-p) * abs(ent_miss - ent_cur);
-}
-
-double computeExpectedInformationGain(float logOdds)
-{
-  float hitLog = testTree.getProbHitLog();
-  float missLog = testTree.getProbMissLog();
-  double p = octomap::probability(logOdds);
-  double ent_cur = probabilityToEntropy(p);
-  double ent_hit = logOddsToEntropy(logOdds + hitLog);
-  double ent_miss = logOddsToEntropy(logOdds + missLog);
-
-  return p * abs(ent_hit - ent_cur) + (1-p) * abs(ent_miss - ent_cur);
-}
-
-double computeExpectedRayInformationGain(const octomap::KeyRay &ray)
-{
-  double expected_gain = 0;
-  double curProb = 1;
-  for (const octomap::OcTreeKey &key : ray)
-  {
-    float logOdds = keyToLogOdds(key);
-    expected_gain += curProb * computeExpectedInformationGain(logOdds);
-    curProb *= octomap::probability(logOdds);
-  }
-  return expected_gain;
-}
-
-double computeWeightedExpectedRayInformationGain(const octomap::KeyRay &ray)
-{
-  double expected_gain = 0;
-  double curProb = 1;
-  for (const octomap::OcTreeKey &key : ray)
-  {
-    float logOdds = keyToLogOdds(key);
-    double roi_val = keyToRoiVal(key);
-    double gain = computeExpectedInformationGain(logOdds);
-    const double ROI_WEIGHT = 0.5;
-    double weightedGain = ROI_WEIGHT * roi_val * gain + (1 - ROI_WEIGHT) * gain;
-    expected_gain += curProb * weightedGain;
-    curProb *= octomap::probability(logOdds);
-  }
-  return expected_gain;
-}
-
-double computeWeightedCellEntropy(const octomap::OcTreeKey &key)
-{
-  double entropy = computeCellEntropy(key);
-  auto inflatedRois = testTree.getInflatedRois(); // must call computeInflatedRois first
-  InflatedRoiOcTreeNode *node = inflatedRois->search(key);
-  double roi_val = 0.0;
-  if (node != NULL)
-    roi_val = node->getValue() / inflatedRois->getMaxRoiVal();
-
-  const double ROI_WEIGHT = 0.5;
-  double weightedEntropy = ROI_WEIGHT * roi_val * entropy + (1 - ROI_WEIGHT) * entropy;
-  return weightedEntropy;
-}
-
-/*double computeViewpointValue(const octomap::pose6d &viewpoint, const image_geometry::PinholeCameraModel &model, const double &minRange, const double &maxRange, size_t xRes, size_t yRes)
-{
-  //cv::Point2d uv;
-  return 0;
-}*/
-
-// make sure x_steps / y_steps equals camera aspect ratio; hfov in rad
-double computeViewpointValue(const octomap::pose6d &viewpoint, const double &hfov, size_t x_steps, size_t y_steps, const double &maxRange)
-{
-  double f_rec =  2 * tan(hfov / 2) / (double)x_steps;
-  double cx = (double)x_steps / 2.0;
-  double cy = (double)y_steps / 2.0;
-  double value = 0;
-  for (size_t i = 0; i < x_steps; i++)
-  {
-    for(size_t j = 0; j < y_steps; j++)
-    {
-      double x = (i + 0.5 - cx) * f_rec;
-      double y = (j + 0.5 - cy) * f_rec;
-      octomap::point3d dir(x, y, 1.0);
-      octomap::point3d end = dir * maxRange;
-      end = viewpoint.transform(end);
-      octomap::KeyRay ray;
-      testTree.computeRayKeys(viewpoint.trans(), end, ray);
-      value += computeWeightedExpectedRayInformationGain(ray);
-    }
-  }
-  return value;
 }
 
 void testRayTrace(const octomap::point3d &orig, const octomap::point3d &end)
@@ -395,6 +251,48 @@ void testRayTrace(const octomap::point3d &orig, const octomap::point3d &end)
     }
 
   }
+}
+
+robot_state::RobotStatePtr sampleNextRobotState(const robot_state::JointModelGroup *joint_model_group, const robot_state::RobotState &current_state)
+{
+  double maxValue = 0;
+  robot_state::RobotStatePtr maxState(new robot_state::RobotState(current_state));
+  robot_state::RobotStatePtr curSample(new robot_state::RobotState(current_state));
+  for (size_t i = 0; i < 10; i++)
+  {
+    curSample->setToRandomPositionsNearBy(joint_model_group, current_state, 0.2);
+    const Eigen::Affine3d& stateTf = curSample->getGlobalLinkTransform("camera_link");
+    auto translation = stateTf.translation();
+    auto quaternion = Eigen::Quaterniond(stateTf.linear()).coeffs();
+    octomap::pose6d viewpoint(octomap::point3d(translation[0], translation[1], translation[2]), octomath::Quaternion(quaternion[0], quaternion[1], quaternion[2], quaternion[3]));
+    tree_mtx.lock();
+    double curValue = testTree.computeViewpointValue(viewpoint, 80.0 * M_PI / 180.0, 8, 6, 5.0);
+    tree_mtx.unlock();
+    if (curValue > maxValue)
+    {
+      *maxState = *curSample;
+      maxValue = curValue;
+    }
+  }
+  return maxState;
+}
+
+bool moveToState(moveit::planning_interface::MoveGroupInterface &manipulator_group, const robot_state::RobotState &goal_state)
+{
+  manipulator_group.setJointValueTarget(goal_state);
+
+  moveit::planning_interface::MoveGroupInterface::Plan plan;
+  bool success = (manipulator_group.plan(plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
+
+  if (success)
+  {
+    manipulator_group.asyncExecute(plan);
+  }
+  else
+  {
+    ROS_INFO("Can't execute plan");
+  }
+  return success;
 }
 
 int main(int argc, char **argv)
@@ -428,8 +326,38 @@ int main(int argc, char **argv)
 
   ros::Subscriber roiSub = nh.subscribe("/pointcloud_roi", 1, registerRoiPCL);
 
+  moveit::planning_interface::MoveGroupInterface manipulator_group("manipulator");
+
+  robot_model_loader::RobotModelLoader robot_model_loader("robot_description");
+  robot_model::RobotModelPtr kinematic_model = robot_model_loader.getModel();
+  const robot_state::JointModelGroup* joint_model_group = kinematic_model->getJointModelGroup("manipulator");
+  robot_state::RobotStatePtr kinematic_state(new robot_state::RobotState(kinematic_model));
+
   for (ros::Rate rate(1); ros::ok(); rate.sleep())
   {
+    /*std::vector<double> mg_joint_values = manipulator_group.getCurrentJointValues();
+    kinematic_state->setJointGroupPositions(joint_model_group, mg_joint_values);
+    kinematic_state->setToRandomPositionsNearBy(joint_model_group, *kinematic_state, 0.2);
+    const Eigen::Affine3d& stateTf = kinematic_state->getGlobalLinkTransform("camera_link");
+    auto translation = stateTf.translation();
+    auto quaternion = Eigen::Quaterniond(stateTf.linear()).coeffs();
+    octomap::pose6d viewpoint(octomap::point3d(translation[0], translation[1], translation[2]), octomath::Quaternion(quaternion[0], quaternion[1], quaternion[2], quaternion[3]));*/
+
     publishMap();
+
+    /*tree_mtx.lock();
+    ros::Time vpEvalStart = ros::Time::now();
+    double value = testTree.computeViewpointValue(viewpoint, 80.0 * M_PI / 180.0, 8, 6, 5.0);
+    double value_no_weighting = testTree.computeViewpointValue(viewpoint, 80.0 * M_PI / 180.0, 8, 6, 5.0, false) / 2;
+    ros::Time vpEvalDone = ros::Time::now();
+    tree_mtx.unlock();
+
+    ROS_INFO_STREAM("Viewpoint value: " << value << " / " << value_no_weighting << "; Computation time: " << (vpEvalDone - vpEvalStart));*/
+
+    std::vector<double> mg_joint_values = manipulator_group.getCurrentJointValues();
+    kinematic_state->setJointGroupPositions(joint_model_group, mg_joint_values);
+    kinematic_state = sampleNextRobotState(joint_model_group, *kinematic_state);
+    moveToState(manipulator_group, *kinematic_state);
+
   }
 }

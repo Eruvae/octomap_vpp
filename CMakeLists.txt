@@ -19,6 +19,8 @@ set (CATKIN_DEPENDENCIES
     instance_segmentation_msgs
     pointcloud_roi_msgs
     image_geometry
+    moveit_ros_planning_interface
+    eigen_conversions
 )
 
 ## Find catkin macros and libraries
