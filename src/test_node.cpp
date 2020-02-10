@@ -26,6 +26,9 @@
 #include <eigen_conversions/eigen_msg.h>
 
 #include <boost/thread/mutex.hpp>
+#include <random>
+
+#include <visualization_msgs/Marker.h>
 
 #include "roioctree.h"
 #include "roioctree_utils.h"
@@ -35,6 +38,7 @@ tf2_ros::Buffer tfBuffer(ros::Duration(30));
 ros::Publisher octomapPub;
 ros::Publisher inflatedOctomapPub;
 ros::Publisher pcGlobalPub;
+ros::Publisher pointVisPub;
 //ros::Publisher planningScenePub;
 
 boost::mutex tree_mtx;
@@ -253,6 +257,122 @@ void testRayTrace(const octomap::point3d &orig, const octomap::point3d &end)
   }
 }
 
+/*void getBorderPoints(const octomap::point3d &orig, double maxDist)
+{
+  std::default_random_engine generator;
+  std::normal_distribution<double> distribution(0.0, 1.0);
+  octomap::point3d dir;
+  for (size_t i = 0; i < 3; i++)
+    dir(i) = distribution(generator);
+
+  dir.normalize() *= maxDist;
+  std::vector<octomap::pose6d> sampledPoses;
+  octomap::KeyRay ray;
+  testTree.computeRayKeys(orig, orig + dir, ray);
+  for (const octomap::OcTreeKey &key : ray)
+  {
+    octomap::OcTreeNode *node = testTree.search(key);
+    if (node == NULL)
+
+    if (node != NULL)
+    {
+      double occ = node->getOccupancy();
+    }
+
+  }
+}*/
+
+bool hasDirectUnkownNeighbour(const octomap::OcTreeKey &key, unsigned int depth)
+{
+  for (int i = 0; i < 6; i++)
+  {
+    octomap::OcTreeKey neighbour_key(key);
+    neighbour_key[i/2] += i%2 ? 1 : -1;
+    RoiOcTreeNode *node = testTree.search(neighbour_key, depth);
+    if (node == NULL || node->getLogOdds() == 0) return true;
+  }
+  return false;
+}
+
+void getBorderPoints(const octomap::point3d &pmin, const octomap::point3d &pmax, unsigned int depth = 0)
+{
+  assert(depth <= testTree.getTreeDepth());
+  if (depth == 0)
+    depth = testTree.getTreeDepth();
+
+  /*octomap::OcTreeKey key_min = testTree.coordToKey(pmin, depth);
+  octomap::OcTreeKey key_max = testTree.coordToKey(pmax, depth);
+
+  for (size_t i = 0; i < 3; i++)
+  {
+    if (key_min[i] > key_max[i]) std::swap(key_min[i], key_max[i]);
+  }*/
+
+  std::vector<octomap::point3d> sampledPoints;
+
+  tree_mtx.lock();
+  /*octomap::OcTreeKey cur_key;
+  for (cur_key[0] = key_min[0]; cur_key[0] <= key_max[0]; cur_key[0]++)
+  {
+    for (cur_key[1] = key_min[1]; cur_key[1] <= key_max[1]; cur_key[1]++)
+    {
+      for (cur_key[2] = key_min[2]; cur_key[2] <= key_max[2]; cur_key[2]++)
+      {
+        RoiOcTreeNode *node = testTree.search(cur_key, depth);
+        if (node != NULL && node->getLogOdds() < 0) // is node free; TODO: replace with bounds later
+        {
+          if (hasDirectUnkownNeighbour(cur_key, depth))
+          {
+            sampledPoints.push_back(testTree.keyToCoord(cur_key, depth));// add node to border list
+          }
+        }
+      }
+    }
+  }*/
+
+  for (auto it = testTree.begin_leafs_bbx(pmin, pmax, depth), end = testTree.end_leafs_bbx(); it != end; it++)
+  {
+    if (it->getLogOdds() < 0) // is node free; TODO: replace with bounds later
+    {
+      if (hasDirectUnkownNeighbour(it.getKey(), depth))
+      {
+        sampledPoints.push_back(it.getCoordinate());// add node to border list
+      }
+    }
+  }
+
+  tree_mtx.unlock();
+
+  visualization_msgs::Marker marker;
+  marker.header.frame_id = "world";
+  marker.header.stamp = ros::Time();
+  marker.ns = "borderPoints";
+  marker.id = 0;
+  marker.type = visualization_msgs::Marker::POINTS;
+  marker.action = visualization_msgs::Marker::ADD;
+  marker.pose.position.x = 0;
+  marker.pose.position.y = 0;
+  marker.pose.position.z = 0;
+  marker.pose.orientation.x = 0.0;
+  marker.pose.orientation.y = 0.0;
+  marker.pose.orientation.z = 0.0;
+  marker.pose.orientation.w = 1.0;
+  marker.scale.x = 0.01;
+  marker.scale.y = 0.01;
+  marker.scale.z = 0.01;
+  marker.color.a = 1.0;
+  marker.color.r = 0.0;
+  marker.color.g = 1.0;
+  marker.color.b = 0.0;
+  for (const octomap::point3d &point : sampledPoints)
+  {
+    marker.points.push_back(octomap::pointOctomapToMsg(point));
+  }
+  pointVisPub.publish( marker );
+}
+
+
+
 robot_state::RobotStatePtr sampleNextRobotState(const robot_state::JointModelGroup *joint_model_group, const robot_state::RobotState &current_state)
 {
   double maxValue = 0;
@@ -307,6 +427,7 @@ int main(int argc, char **argv)
   inflatedOctomapPub = nh.advertise<octomap_msgs::Octomap>("inflated_octomap", 1);
   //pcGlobalPub = nh.advertise<sensor_msgs::PointCloud2>(PC_GLOBAL, 1);
   //planningScenePub = nh.advertise<moveit_msgs::PlanningScene>("/planning_scene", 1);
+  pointVisPub = nh.advertise<visualization_msgs::Marker>("border_marker", 1);
 
   message_filters::Subscriber<sensor_msgs::PointCloud2> depthCloudSub(nh, PC_TOPIC, 1);
   //tf2_ros::MessageFilter<sensor_msgs::PointCloud2> tfCloudFilter(depthCloudSub, tfBuffer, MAP_FRAME, 1, nh);
@@ -354,10 +475,26 @@ int main(int argc, char **argv)
 
     ROS_INFO_STREAM("Viewpoint value: " << value << " / " << value_no_weighting << "; Computation time: " << (vpEvalDone - vpEvalStart));*/
 
-    std::vector<double> mg_joint_values = manipulator_group.getCurrentJointValues();
+    /*std::vector<double> mg_joint_values = manipulator_group.getCurrentJointValues();
     kinematic_state->setJointGroupPositions(joint_model_group, mg_joint_values);
     kinematic_state = sampleNextRobotState(joint_model_group, *kinematic_state);
-    moveToState(manipulator_group, *kinematic_state);
+    moveToState(manipulator_group, *kinematic_state);*/
 
+    geometry_msgs::TransformStamped camFrameTf;
+
+    try
+    {
+      camFrameTf = tfBuffer.lookupTransform(MAP_FRAME, "camera_link", ros::Time(0));
+    }
+    catch (const tf2::TransformException &e)
+    {
+      ROS_ERROR_STREAM("Couldn't find transform to map frame: " << e.what());
+      continue;
+    }
+
+    const geometry_msgs::Vector3 &camOrig = camFrameTf.transform.translation;
+    octomap::point3d box_min(camOrig.x - 0.2, camOrig.y - 0.2, camOrig.z - 0.2);
+    octomap::point3d box_max(camOrig.x + 0.2, camOrig.y + 0.2, camOrig.z + 0.2);
+    getBorderPoints(box_min, box_max);
   }
 }
