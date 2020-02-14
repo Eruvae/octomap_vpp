@@ -1,4 +1,4 @@
-#ifndef ROIOCTREE_H
+﻿#ifndef ROIOCTREE_H
 #define ROIOCTREE_H
 
 #include <octomap/OcTreeNode.h>
@@ -116,6 +116,58 @@ public:
     }
     return res;*/
     return roi_keys;
+  }
+
+  std::vector<octomap::point3d> getClusterCenters()
+  {
+    std::vector<std::vector<octomap::OcTreeKey>> clusters = computeClusters();
+    std::vector<octomap::point3d> clusterCenters;
+    for (auto &cluster : clusters)
+    {
+      octomap::point3d sum;
+      for (auto &key : cluster)
+      {
+        sum += keyToCoord(key);
+      }
+      sum /= cluster.size();
+      clusterCenters.push_back(sum);
+    }
+    return clusterCenters;
+  }
+
+  std::vector<std::vector<octomap::OcTreeKey>> computeClusters()
+  {
+    std::vector<std::vector<octomap::OcTreeKey>> clusters;
+    if (roi_keys.size() == 0) return clusters;
+    octomap::KeySet roisToProcess = roi_keys;
+    while (!roisToProcess.empty())
+    {
+      std::vector<octomap::OcTreeKey> currentCluster;
+      auto it = roisToProcess.begin();
+      std::deque<octomap::OcTreeKey> nbsToProcess;
+      nbsToProcess.push_back(*it);
+      roisToProcess.erase(it);
+      while (!nbsToProcess.empty())
+      {
+        octomap::OcTreeKey curKey = nbsToProcess.front();
+        nbsToProcess.pop_front();
+        currentCluster.push_back(curKey);
+        for (size_t i = 0; i < 18; i++)
+        {
+          //octomap::OcTreeKey neighbourKey(curKey);
+          //neighbourKey[i/2] += i%2 ? 1 : -1;
+          octomap::OcTreeKey neighbourKey(curKey[0] + nb18Lut[i][0], curKey[1] + nb18Lut[i][1], curKey[2] + nb18Lut[i][2]);
+          it = roisToProcess.find(neighbourKey);
+          if (it != roisToProcess.end())
+          {
+            nbsToProcess.push_back(*it);
+            roisToProcess.erase(it);
+          }
+        }
+      }
+      clusters.push_back(currentCluster);
+    }
+    return clusters;
   }
 
   inline size_t getRoiSize() {return roi_keys.size();}

@@ -279,6 +279,7 @@ std::shared_ptr<InflatedRoiOcTree> RoiOcTree::computeInflatedRois()
     inflated_rois->updateNodeVal(curKey, curVal, true, !full_construct);
     processedKeys.insert(curKey);*/
 
+    #pragma omp parallel for collapse(3)
     for (int i = -1; i <= 1; i++)
     {
       for (int j = -1; j <= 1; j++)
