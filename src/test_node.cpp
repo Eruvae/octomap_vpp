@@ -25,11 +25,15 @@
 
 #include <eigen_conversions/eigen_msg.h>
 
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+
 #include <boost/thread/mutex.hpp>
 #include <random>
 
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
+
+#include <geometry_msgs/PoseArray.h>
 
 #include "roioctree.h"
 #include "roioctree_utils.h"
@@ -41,6 +45,7 @@ ros::Publisher inflatedOctomapPub;
 ros::Publisher pcGlobalPub;
 ros::Publisher pointVisPub;
 ros::Publisher viewArrowVisPub;
+ros::Publisher poseArrayPub;
 //ros::Publisher planningScenePub;
 
 boost::mutex tree_mtx;
@@ -291,36 +296,71 @@ octomap::point3d sampleRandomPointOnSphere(const octomap::point3d &center, doubl
   }
 }*/
 
-void sampleAroundROICenter(const octomap::point3d &center, const double &dist, size_t roiID = 0)
+void sampleAroundROICenter(const octomap::point3d &center, const double &dist,  const octomap::point3d &camPos, const tf2::Quaternion &camQuat, size_t roiID = 0)
 {
+  tf2::Matrix3x3 camMat(camQuat);
+  tf2::Vector3 viewDir = camMat.getColumn(0);
+
   std::vector<octomap::point3d> sampledPoints;
+  std::vector<size_t> infoGain;
+  std::vector<double> distances;
+  std::vector<bool> vpIsFree;
+  std::vector<tf2::Quaternion> vpOrientations;
   for (size_t i = 0; i < 10; i++)
   {
     octomap::KeyRay ray;
     octomap::point3d spherePoint = sampleRandomPointOnSphere(center, dist);
     testTree.computeRayKeys(center, spherePoint, ray);
     bool view_occluded = false;
+    bool has_left_roi = false;
+    bool last_node_free = false;
+    size_t unknown_nodes = 0;
     for (const octomap::OcTreeKey &key : ray)
     {
       RoiOcTreeNode *node = testTree.search(key);
       if (node == NULL)
       {
+        unknown_nodes++;
+        has_left_roi = true;
+        last_node_free = false;
         continue;
       }
-      if (testTree.isNodeROI(node))
+      if (!has_left_roi && testTree.isNodeROI(node))
       {
         continue;
       }
+      has_left_roi = true;
       double occ = node->getOccupancy();
-      if (occ > testTree.getOccupancyThres()) // View is blocked
+      if (occ > 0.6) // View is blocked
       {
         view_occluded = true;
         break;
       }
+      else if (occ > 0.4) // unknown
+      {
+        unknown_nodes++;
+        last_node_free = false;
+      }
+      else //free
+      {
+        last_node_free = true;
+      }
     }
     if (!view_occluded)
     {
+      octomath::Vector3 dirVec = center - spherePoint;
+      dirVec.normalize();
+      tf2::Vector3 dirVecTf = tf2::Vector3(dirVec.x(), dirVec.y(), dirVec.z());
       sampledPoints.push_back(spherePoint);
+      infoGain.push_back(unknown_nodes);
+      distances.push_back((spherePoint - camPos).norm());
+      vpIsFree.push_back(last_node_free);
+
+      tf2::Vector3 rotAx = viewDir.cross(dirVecTf);
+      double rotAng = viewDir.angle(dirVecTf);
+      tf2::Quaternion toRot(rotAx, rotAng);
+      tf2::Quaternion viewQuat = toRot * camQuat;
+      vpOrientations.push_back(viewQuat);
     }
   }
 
@@ -348,11 +388,48 @@ void sampleAroundROICenter(const octomap::point3d &center, const double &dist, s
     marker.color.r = colID == 0 ? 1.0 : 0.0;
     marker.color.g = colID == 1 ? 1.0 : 0.0;
     marker.color.b = colID == 2 ? 1.0 : 0.0;
+    marker.lifetime = ros::Duration(2);
     marker.points.push_back(octomap::pointOctomapToMsg(sampledPoints[i]));
     marker.points.push_back(octomap::pointOctomapToMsg(center));
     markers.markers.push_back(marker);
+
+    visualization_msgs::Marker textMarker;
+    textMarker.header.frame_id = "world";
+    textMarker.header.stamp = ros::Time();
+    textMarker.ns = "roiPoints_texts" + roiID;
+    textMarker.id = i;
+    textMarker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+    textMarker.action = visualization_msgs::Marker::ADD;
+    textMarker.pose.position.x = sampledPoints[i].x();
+    textMarker.pose.position.y = sampledPoints[i].y();
+    textMarker.pose.position.z = sampledPoints[i].z();
+    textMarker.pose.orientation.x = 0.0;
+    textMarker.pose.orientation.y = 0.0;
+    textMarker.pose.orientation.z = 0.0;
+    textMarker.pose.orientation.w = 1.0;
+    textMarker.scale.z = 0.05;
+    textMarker.color.a = 1.0;
+    textMarker.color.r = colID == 0 ? 1.0 : 0.0;
+    textMarker.color.g = colID == 1 ? 1.0 : 0.0;
+    textMarker.color.b = colID == 2 ? 1.0 : 0.0;
+    textMarker.lifetime = ros::Duration(2);
+    textMarker.text = std::to_string(infoGain[i]) + ", " + std::to_string(distances[i]) + ", " + std::to_string(vpIsFree[i]);
+    markers.markers.push_back(textMarker);
   }
   viewArrowVisPub.publish(markers);
+
+  geometry_msgs::PoseArray poseArr;
+  poseArr.header.frame_id = "world";
+  poseArr.header.stamp = ros::Time::now();
+  for (size_t i = 0; i < sampledPoints.size(); i++)
+  {
+    geometry_msgs::Pose pose;
+    pose.position = octomap::pointOctomapToMsg(sampledPoints[i]);
+    pose.orientation = tf2::toMsg(vpOrientations[i]);
+    poseArr.poses.push_back(pose);
+  }
+  poseArrayPub.publish(poseArr);
+
 }
 
 bool hasDirectUnkownNeighbour(const octomap::OcTreeKey &key, unsigned int depth)
@@ -502,6 +579,7 @@ int main(int argc, char **argv)
   //planningScenePub = nh.advertise<moveit_msgs::PlanningScene>("/planning_scene", 1);
   pointVisPub = nh.advertise<visualization_msgs::Marker>("border_marker", 1);
   viewArrowVisPub = nh.advertise<visualization_msgs::MarkerArray>("roi_vp_marker", 1);
+  poseArrayPub = nh.advertise<geometry_msgs::PoseArray>("vp_array", 1);
 
   message_filters::Subscriber<sensor_msgs::PointCloud2> depthCloudSub(nh, PC_TOPIC, 1);
   //tf2_ros::MessageFilter<sensor_msgs::PointCloud2> tfCloudFilter(depthCloudSub, tfBuffer, MAP_FRAME, 1, nh);
@@ -571,12 +649,15 @@ int main(int argc, char **argv)
     octomap::point3d box_max(camOrig.x + 0.2, camOrig.y + 0.2, camOrig.z + 0.2);
     getBorderPoints(box_min, box_max);
 
+    tf2::Quaternion camQuat;
+    tf2::fromMsg(camFrameTf.transform.rotation, camQuat);
+
     std::vector<octomap::point3d> clusterCenters = testTree.getClusterCenters();
     ROS_INFO_STREAM("ROI count: " << testTree.getRoiSize() << "; Clusters: " << clusterCenters.size());
     for (size_t i = 0; i < clusterCenters.size(); i++)
     {
       ROS_INFO_STREAM("Cluster center: " << clusterCenters[i]);
-      sampleAroundROICenter(clusterCenters[i], 0.5, i);
+      sampleAroundROICenter(clusterCenters[i], 0.5, octomap::point3d(camOrig.x, camOrig.y, camOrig.z), camQuat, i);
     }
   }
 }
