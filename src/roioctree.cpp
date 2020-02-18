@@ -73,7 +73,7 @@ void RoiOcTree::insertRegionScan(const octomap::Pointcloud &regionPoints, const 
     //  offRegionNodes.insert(node);
 
     octomap::OcTreeKey key;
-    if (coordToKeyChecked(p, key))
+    if (coordToKeyChecked(p, key) && (regionNodes.find(key) == regionNodes.end())) // regionNodes have priority over offRegionNodes
       offRegionNodes.insert(key);
   }
 

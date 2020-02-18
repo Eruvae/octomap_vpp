@@ -140,9 +140,7 @@ void RoiOcTreeDisplay::incomingMessageCallback(const octomap_msgs::OctomapConstP
                     typename RoiOcTree::NodeType* node = octomap->search(key, treeDepth);
 
                     // the left part evaluates to 1 for free voxels and 2 for occupied voxels
-                    int nbNodeMask = ((int)octomap->isNodeOccupied(*it) + 1) | ((int)octomap->isNodeROI(*it) << 2);
-
-                    if (!(node && (nbNodeMask & render_mode_mask)))
+                    if (!(node && ((((int)octomap->isNodeOccupied(node) + 1) | ((int)octomap->isNodeROI(node) << 2)) & render_mode_mask)))
                     {
                       // we do not have a neighbor => break!
                       allNeighborsFound = false;

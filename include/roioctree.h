@@ -10,6 +10,7 @@
 #include <unordered_set>
 #include <queue>
 #include <ros/ros.h>
+#include <sensor_msgs/PointCloud2.h>
 
 #include "inflatedroioctree.h"
 #include "roioctree_utils.h"
