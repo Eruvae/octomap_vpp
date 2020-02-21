@@ -325,9 +325,13 @@ std::vector<Viewpoint> sampleAroundMultiROICenters(const std::vector<octomap::po
   tf2::Vector3 viewDir = camMat.getColumn(0);
 
   std::vector<Viewpoint> sampledPoints;
+  if (centers.empty()) return sampledPoints;
+  ros::Time samplingStartTime = ros::Time::now();
+  const size_t TOTAL_SAMPLE_TRIES = 500;
+  size_t samples_per_center = TOTAL_SAMPLE_TRIES / centers.size();
   for (const octomap::point3d &center : centers)
   {
-    for (size_t i = 0; i < 10; i++)
+    for (size_t i = 0; i < samples_per_center; i++)
     {
       octomap::KeyRay ray;
       octomap::point3d spherePoint = sampleRandomPointOnSphere(center, dist);
@@ -389,10 +393,11 @@ std::vector<Viewpoint> sampleAroundMultiROICenters(const std::vector<octomap::po
       }
     }
   }
+  ROS_INFO_STREAM("Time for sampling: " << (ros::Time::now() - samplingStartTime));
   return sampledPoints;
 }
 
-void publishViewpointVisualizations(const std::vector<Viewpoint> viewpoints)
+void publishViewpointVisualizations(const std::vector<Viewpoint> &viewpoints)
 {
   visualization_msgs::MarkerArray markers;
   geometry_msgs::PoseArray poseArr;
@@ -507,7 +512,7 @@ void sampleAroundROICenter(const octomap::point3d &center, const double &dist,  
         last_node_free = true;
       }
     }
-    if (!view_occluded)
+    if (!view_occluded && unknown_nodes > 0)
     {
       octomath::Vector3 dirVec = center - spherePoint;
       dirVec.normalize();
@@ -593,7 +598,7 @@ void sampleAroundROICenter(const octomap::point3d &center, const double &dist,  
 
 }
 
-bool hasDirectUnkownNeighbour(const octomap::OcTreeKey &key, unsigned int depth)
+bool hasDirectUnkownNeighbour(const octomap::OcTreeKey &key, unsigned int depth = 0)
 {
   for (int i = 0; i < 6; i++)
   {
@@ -682,6 +687,54 @@ void getBorderPoints(const octomap::point3d &pmin, const octomap::point3d &pmax,
   pointVisPub.publish( marker );
 }
 
+octomap::point3d computeUnknownDir(const octomap::OcTreeKey &key)
+{
+  octomap::point3d averageUnknownDir;
+  for (size_t i = 0; i < 18; i++)
+  {
+    octomap::OcTreeKey neighbour_key(key[0] + nb18Lut[i][0], key[1] + nb18Lut[i][1], key[2] + nb18Lut[i][2]);
+    RoiOcTreeNode *node = testTree.search(neighbour_key);
+    if (node == NULL || node->getLogOdds() == 0)
+    {
+      averageUnknownDir += octomap::point3d(nb18Lut[i][0], nb18Lut[i][1], nb18Lut[i][2]);
+    }
+  }
+  averageUnknownDir.normalize();
+  return averageUnknownDir;
+}
+
+std::vector<Viewpoint> getBorderPoints(const octomap::point3d &pmin, const octomap::point3d &pmax, const octomap::point3d &camPos, const tf2::Quaternion &camQuat)
+{
+  tf2::Matrix3x3 camMat(camQuat);
+  tf2::Vector3 viewDir = camMat.getColumn(0);
+  std::vector<Viewpoint> sampledPoints;
+
+  tree_mtx.lock();
+
+  for (auto it = testTree.begin_leafs_bbx(pmin, pmax), end = testTree.end_leafs_bbx(); it != end; it++)
+  {
+    if (it->getLogOdds() < 0) // is node free; TODO: replace with bounds later
+    {
+      if (hasDirectUnkownNeighbour(it.getKey()))
+      {
+        Viewpoint vp;
+        vp.point = it.getCoordinate();
+        octomath::Vector3 dirVec = computeUnknownDir(it.getKey());
+        vp.target = vp.point + dirVec;
+        tf2::Vector3 dirVecTf = tf2::Vector3(dirVec.x(), dirVec.y(), dirVec.z());
+        tf2::Vector3 rotAx = viewDir.cross(dirVecTf);
+        double rotAng = viewDir.angle(dirVecTf);
+        tf2::Quaternion toRot(rotAx, rotAng);
+        vp.orientation = toRot * camQuat;
+        sampledPoints.push_back(vp);// add node to border list
+      }
+    }
+  }
+
+  tree_mtx.unlock();
+  return sampledPoints;
+}
+
 
 
 robot_state::RobotStatePtr sampleNextRobotState(const robot_state::JointModelGroup *joint_model_group, const robot_state::RobotState &current_state)
@@ -712,14 +765,18 @@ bool moveToPose(moveit::planning_interface::MoveGroupInterface &manipulator_grou
 {
   manipulator_group.setPoseReferenceFrame("world");
   manipulator_group.setPlannerId("TRRTkConfigDefault");
+  ros::Time setTargetTime = ros::Time::now();
   if (!manipulator_group.setJointValueTarget(goal_pose, "camera_link"))
   {
-    ROS_INFO("Could not find IK for specified pose");
+    ROS_INFO_STREAM("Could not find IK for specified pose (Timeout: " << (ros::Time::now() - setTargetTime) << ")");
     return false;
   }
+  ROS_INFO_STREAM("IK solve time: " << (ros::Time::now() - setTargetTime));
 
   moveit::planning_interface::MoveGroupInterface::Plan plan;
+  ros::Time planStartTime = ros::Time::now();
   bool success = (manipulator_group.plan(plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
+  ROS_INFO_STREAM("Planning duration: " << (ros::Time::now() - planStartTime));
 
   if (success)
   {
@@ -833,10 +890,13 @@ int main(int argc, char **argv)
     const geometry_msgs::Vector3 &camOrig = camFrameTf.transform.translation;
     octomap::point3d box_min(camOrig.x - 0.2, camOrig.y - 0.2, camOrig.z - 0.2);
     octomap::point3d box_max(camOrig.x + 0.2, camOrig.y + 0.2, camOrig.z + 0.2);
-    getBorderPoints(box_min, box_max);
+    //getBorderPoints(box_min, box_max);
 
     tf2::Quaternion camQuat;
     tf2::fromMsg(camFrameTf.transform.rotation, camQuat);
+
+    //std::vector<Viewpoint> borderVps = getBorderPoints(box_min, box_max, octomap::point3d(camOrig.x, camOrig.y, camOrig.z), camQuat);
+    //publishViewpointVisualizations(borderVps);
 
     std::vector<octomap::point3d> clusterCenters = testTree.getClusterCenters();
     ROS_INFO_STREAM("ROI count: " << testTree.getRoiSize() << "; Clusters: " << clusterCenters.size());
