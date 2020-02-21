@@ -9,6 +9,7 @@ namespace roioctree_rviz_plugin
 
 class InflatedRoiOctreeDisplay : public octomap_rviz_plugin::OccupancyGridDisplay
 {
+Q_OBJECT
 public:
   InflatedRoiOctreeDisplay();
 protected:
