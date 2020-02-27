@@ -36,10 +36,10 @@
 
 #include <geometry_msgs/PoseArray.h>
 
-#include "roioctree.h"
-#include "roioctree_utils.h"
+#include "octomap_vpp/RoiOcTree.h"
+#include "octomap_vpp/roioctree_utils.h"
 
-RoiOcTree testTree(0.02);
+octomap_vpp::RoiOcTree testTree(0.02);
 tf2_ros::Buffer tfBuffer(ros::Duration(30));
 ros::Publisher octomapPub;
 ros::Publisher inflatedOctomapPub;
@@ -87,7 +87,7 @@ void publishMap()
 
   /*tree_mtx.lock();
   ros::Time inflationStart = ros::Time::now();
-  std::shared_ptr<InflatedRoiOcTree> inflatedTree = testTree.computeInflatedRois();
+  std::shared_ptr<octomap_vpp::InflatedRoiOcTree> inflatedTree = testTree.computeInflatedRois();
   ros::Time inflationDone = ros::Time::now();
   tree_mtx.unlock();
 
@@ -342,7 +342,7 @@ std::vector<Viewpoint> sampleAroundMultiROICenters(const std::vector<octomap::po
       size_t unknown_nodes = 0;
       for (const octomap::OcTreeKey &key : ray)
       {
-        RoiOcTreeNode *node = testTree.search(key);
+        octomap_vpp::RoiOcTreeNode *node = testTree.search(key);
         if (node == NULL)
         {
           unknown_nodes++;
@@ -483,7 +483,7 @@ void sampleAroundROICenter(const octomap::point3d &center, const double &dist,  
     size_t unknown_nodes = 0;
     for (const octomap::OcTreeKey &key : ray)
     {
-      RoiOcTreeNode *node = testTree.search(key);
+      octomap_vpp::RoiOcTreeNode *node = testTree.search(key);
       if (node == NULL)
       {
         unknown_nodes++;
@@ -604,7 +604,7 @@ bool hasDirectUnkownNeighbour(const octomap::OcTreeKey &key, unsigned int depth 
   {
     octomap::OcTreeKey neighbour_key(key);
     neighbour_key[i/2] += i%2 ? 1 : -1;
-    RoiOcTreeNode *node = testTree.search(neighbour_key, depth);
+    octomap_vpp::RoiOcTreeNode *node = testTree.search(neighbour_key, depth);
     if (node == NULL || node->getLogOdds() == 0) return true;
   }
   return false;
@@ -692,11 +692,11 @@ octomap::point3d computeUnknownDir(const octomap::OcTreeKey &key)
   octomap::point3d averageUnknownDir;
   for (size_t i = 0; i < 18; i++)
   {
-    octomap::OcTreeKey neighbour_key(key[0] + nb18Lut[i][0], key[1] + nb18Lut[i][1], key[2] + nb18Lut[i][2]);
-    RoiOcTreeNode *node = testTree.search(neighbour_key);
+    octomap::OcTreeKey neighbour_key(key[0] + octomap_vpp::nb18Lut[i][0], key[1] + octomap_vpp::nb18Lut[i][1], key[2] + octomap_vpp::nb18Lut[i][2]);
+    octomap_vpp::RoiOcTreeNode *node = testTree.search(neighbour_key);
     if (node == NULL || node->getLogOdds() == 0)
     {
-      averageUnknownDir += octomap::point3d(nb18Lut[i][0], nb18Lut[i][1], nb18Lut[i][2]);
+      averageUnknownDir += octomap::point3d(octomap_vpp::nb18Lut[i][0], octomap_vpp::nb18Lut[i][1], octomap_vpp::nb18Lut[i][2]);
     }
   }
   averageUnknownDir.normalize();

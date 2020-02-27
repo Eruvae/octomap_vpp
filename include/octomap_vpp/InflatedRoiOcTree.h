@@ -4,6 +4,9 @@
 #include <octomap/OcTreeDataNode.h>
 #include <octomap/OcTreeBase.h>
 
+namespace octomap_vpp
+{
+
 class InflatedRoiOcTreeNode : public octomap::OcTreeDataNode<float>
 {
 public:
@@ -165,5 +168,7 @@ protected:
   /// to ensure static initialization (only once)
   static StaticMemberInitializer ocTreeMemberInit;
 };
+
+}
 
 #endif // INFLATEDROIOCTREE_H

@@ -61,8 +61,6 @@
   <depend>message_filters</depend>
   <depend>octomap_ros</depend>
   <depend>octomap_msgs</depend>
-  <depend>rviz</depend>
-  <depend>octomap_rviz_plugins</depend>
   <depend>instance_segmentation_msgs</depend>
   <depend>pointcloud_roi_msgs</depend>
   <depend>image_geometry</depend>
@@ -72,7 +70,6 @@
   <!-- The export tag contains other, unspecified, tags -->
   <export>
     <!-- Other tools can request additional information be placed here -->
-    <rviz plugin="${prefix}/plugin_description.xml"/>
 
   </export>
 </package>

@@ -4,6 +4,9 @@
 #include <octomap/octomap_utils.h>
 #include <geometry_msgs/PoseStamped.h>
 
+namespace octomap_vpp
+{
+
 const int nb6Lut [6][3] = {
   {-1, 0, 0},
   {0, -1, 0},
@@ -71,6 +74,8 @@ inline double probabilityToEntropy(double p)
 inline double logOddsToEntropy(float logOdds)
 {
   return probabilityToEntropy(octomap::probability(logOdds));
+}
+
 }
 
 #endif // ROIOCTREE_UTILS_H

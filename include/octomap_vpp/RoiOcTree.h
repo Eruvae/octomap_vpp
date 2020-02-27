@@ -12,8 +12,11 @@
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
 
-#include "inflatedroioctree.h"
+#include "InflatedRoiOcTree.h"
 #include "roioctree_utils.h"
+
+namespace octomap_vpp
+{
 
 class RoiOcTreeNode : public octomap::OcTreeNode
 {
@@ -371,5 +374,7 @@ protected:
   /// to ensure static initialization (only once)
   static StaticMemberInitializer ocTreeMemberInit;
 };
+
+}
 
 #endif // ROIOCTREE_H

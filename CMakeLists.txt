@@ -14,8 +14,6 @@ set (CATKIN_DEPENDENCIES
     message_filters
     octomap_ros
     octomap_msgs
-    rviz
-    octomap_rviz_plugins
     instance_segmentation_msgs
     pointcloud_roi_msgs
     image_geometry
@@ -31,23 +29,6 @@ find_package(catkin REQUIRED COMPONENTS ${CATKIN_DEPENDENCIES})
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 find_package(octomap REQUIRED)
-
-## This setting causes Qt's "MOC" generation to happen automatically.
-set(CMAKE_AUTOMOC ON)
-
-## This plugin includes Qt widgets, so we must include Qt.
-## We'll use the version that rviz used so they are compatible.
-if(rviz_QT_VERSION VERSION_LESS "5")
-  message(STATUS "Using Qt4 based on the rviz_QT_VERSION: ${rviz_QT_VERSION}")
-  find_package(Qt4 ${rviz_QT_VERSION} EXACT REQUIRED QtCore QtGui)
-  ## pull in all required include dirs, define QT_LIBRARIES, etc.
-  include(${QT_USE_FILE})
-else()
-  message(STATUS "Using Qt5 based on the rviz_QT_VERSION: ${rviz_QT_VERSION}")
-  find_package(Qt5 ${rviz_QT_VERSION} EXACT REQUIRED Core Widgets)
-  ## make target_link_libraries(${QT_LIBRARIES}) pull in all required dependencies
-  set(QT_LIBRARIES Qt5::Widgets)
-endif()
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -135,8 +116,8 @@ endif()
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-#  INCLUDE_DIRS include
-   LIBRARIES roioctree_rviz_plugin
+   INCLUDE_DIRS include
+   LIBRARIES ${PROJECT_NAME}
    CATKIN_DEPENDS ${CATKIN_DEPENDENCIES}
 #  DEPENDS system_lib
 )
@@ -157,20 +138,20 @@ include_directories(
 # add_library(${PROJECT_NAME}
 #   src/${PROJECT_NAME}/octomap_vpp.cpp
 # )
-add_library(roioctree_rviz_plugin src/roi_octree_display.cpp include/roi_octree_display.h src/inflated_roi_octree_display.cpp include/inflated_roi_octree_display.h src/roioctree.cpp src/inflatedroioctree.cpp ${MOC_FILES})
+add_library(${PROJECT_NAME} src/RoiOcTree.cpp src/InflatedRoiOcTree.cpp src/CountingOcTree.cpp src/WorkspaceOcTree.cpp)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
 # add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-add_dependencies(roioctree_rviz_plugin ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(roioctree_rviz_plugin ${catkin_LIBRARIES} ${QT_LIBRARIES} ${OCTOMAP_LIBRARIES})
+add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} ${OCTOMAP_LIBRARIES})
 
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/octomap_vpp_node.cpp)
-add_executable(test_node src/test_node.cpp src/roioctree.cpp src/inflatedroioctree.cpp)
+add_executable(test_node src/test_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -187,7 +168,7 @@ add_dependencies(test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED
 # target_link_libraries(${PROJECT_NAME}_node
 #   ${catkin_LIBRARIES}
 # )
-target_link_libraries(test_node ${catkin_LIBRARIES} ${OCTOMAP_LIBRARIES})
+target_link_libraries(test_node ${PROJECT_NAME} ${catkin_LIBRARIES} ${OCTOMAP_LIBRARIES})
 
 #############
 ## Install ##

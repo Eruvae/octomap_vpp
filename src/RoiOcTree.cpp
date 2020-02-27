@@ -1,4 +1,7 @@
-#include "roioctree.h"
+#include "octomap_vpp/RoiOcTree.h"
+
+namespace octomap_vpp
+{
 
 double RoiOcTreeNode::getMeanChildRoiLogOdds() const
 {
@@ -333,4 +336,6 @@ void RoiOcTree::updateNodeRoiLogOdds(RoiOcTreeNode* node, const float& update) c
   if (node->getRoiLogOdds() > this->clamping_thres_max) {
     node->setRoiLogOdds(this->clamping_thres_max);
   }
+}
+
 }
