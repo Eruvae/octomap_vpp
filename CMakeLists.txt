@@ -6,19 +6,8 @@ add_compile_options(-std=c++11)
 
 set (CATKIN_DEPENDENCIES
     roscpp
-    tf2_ros
-    tf2_geometry_msgs
-    tf2_sensor_msgs
-    sensor_msgs
-    geometry_msgs
-    message_filters
     octomap_ros
     octomap_msgs
-    instance_segmentation_msgs
-    pointcloud_roi_msgs
-    image_geometry
-    moveit_ros_planning_interface
-    eigen_conversions
 )
 
 ## Find catkin macros and libraries
@@ -119,7 +108,7 @@ catkin_package(
    INCLUDE_DIRS include
    LIBRARIES ${PROJECT_NAME}
    CATKIN_DEPENDS ${CATKIN_DEPENDENCIES}
-#  DEPENDS system_lib
+   DEPENDS OCTOMAP
 )
 
 ###########
@@ -151,7 +140,6 @@ target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} ${OCTOMAP_LIBRARIES})
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/octomap_vpp_node.cpp)
-add_executable(test_node src/test_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -162,13 +150,11 @@ add_executable(test_node src/test_node.cpp)
 ## Add cmake target dependencies of the executable
 ## same as for the library above
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-add_dependencies(test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
 # target_link_libraries(${PROJECT_NAME}_node
 #   ${catkin_LIBRARIES}
 # )
-target_link_libraries(test_node ${PROJECT_NAME} ${catkin_LIBRARIES} ${OCTOMAP_LIBRARIES})
 
 #############
 ## Install ##
