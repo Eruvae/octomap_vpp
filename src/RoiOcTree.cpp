@@ -250,7 +250,7 @@ std::shared_ptr<InflatedRoiOcTree> RoiOcTree::computeInflatedRois()
 
   float maxVal = inflated_rois->getMaxRoiVal();
   float stepReduction = maxVal / inflated_rois->getInfluenceRadius() * inflated_rois->getResolution() ;
-  ROS_INFO_STREAM("Max Val: " << maxVal << "; Step reduction: " << stepReduction);
+  //ROS_INFO_STREAM("Max Val: " << maxVal << "; Step reduction: " << stepReduction);
   const octomap::KeySet &keysToAdd = full_construct ? roi_keys : added_rois;
   for (const octomap::OcTreeKey &key : keysToAdd)
   {

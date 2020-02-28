@@ -2,7 +2,7 @@
 #define ROIOCTREE_UTILS_H
 
 #include <octomap/octomap_utils.h>
-#include <geometry_msgs/PoseStamped.h>
+//#include <geometry_msgs/PoseStamped.h>
 
 namespace octomap_vpp
 {

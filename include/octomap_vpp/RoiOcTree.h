@@ -9,8 +9,8 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <queue>
-#include <ros/ros.h>
-#include <sensor_msgs/PointCloud2.h>
+#include <memory>
+//#include <ros/ros.h>
 
 #include "InflatedRoiOcTree.h"
 #include "roioctree_utils.h"
