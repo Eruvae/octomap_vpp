@@ -47,6 +47,18 @@ public:
   void updateInnerVals();
   void updateInnerValsRecurs(WorkspaceNode* node, unsigned int depth);
 
+  inline float getReachability(const octomap::OcTreeKey &key, unsigned int depth = 0)
+  {
+    WorkspaceNode *node = search(key, depth);
+    return node ? node->getValue() : 0.f;
+  }
+
+  inline float getReachability(const octomap::point3d &point, unsigned int depth = 0)
+  {
+    WorkspaceNode *node = search(point, depth);
+    return node ? node->getValue() : 0.f;
+  }
+
 protected:
   /**
    * Static member object which ensures that this OcTree's prototype
