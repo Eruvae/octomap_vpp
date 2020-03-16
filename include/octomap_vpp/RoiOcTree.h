@@ -122,9 +122,9 @@ public:
     return roi_keys;
   }
 
-  std::vector<octomap::point3d> getClusterCenters()
+  std::vector<octomap::point3d> getClusterCenters(size_t min_cluster_size = 10)
   {
-    std::vector<std::vector<octomap::OcTreeKey>> clusters = computeClusters();
+    std::vector<std::vector<octomap::OcTreeKey>> clusters = computeClusters(min_cluster_size);
     std::vector<octomap::point3d> clusterCenters;
     for (auto &cluster : clusters)
     {
@@ -139,7 +139,35 @@ public:
     return clusterCenters;
   }
 
-  std::vector<std::vector<octomap::OcTreeKey>> computeClusters()
+  std::pair<std::vector<octomap::point3d>, std::vector<octomap::point3d>> getClusterCentersWithVolume(size_t min_cluster_size = 10)
+  {
+    std::vector<std::vector<octomap::OcTreeKey>> clusters = computeClusters(min_cluster_size);
+    std::pair<std::vector<octomap::point3d>, std::vector<octomap::point3d>> clusterCenters;
+    const float FMIN = -std::numeric_limits<float>::infinity();
+    const float FMAX = std::numeric_limits<float>::infinity();
+    for (auto &cluster : clusters)
+    {
+      octomap::point3d sum, min(FMAX, FMAX, FMAX), max(FMIN, FMIN, FMIN);
+      for (auto &key : cluster)
+      {
+        octomap::point3d coord = keyToCoord(key);
+        sum += coord;
+        if (coord.x() < min.x()) min.x() = coord.x();
+        if (coord.y() < min.y()) min.y() = coord.y();
+        if (coord.z() < min.z()) min.z() = coord.z();
+        if (coord.x() > max.x()) max.x() = coord.x();
+        if (coord.y() > max.y()) max.y() = coord.y();
+        if (coord.z() > max.z()) max.z() = coord.z();
+      }
+      sum /= cluster.size();
+      //double vol = (max.x() - min.x()) * (max.y() - min.y()) * (max.z() - min.z());
+      clusterCenters.first.push_back(sum);
+      clusterCenters.second.push_back(max - min);
+    }
+    return clusterCenters;
+  }
+
+  std::vector<std::vector<octomap::OcTreeKey>> computeClusters(size_t min_cluster_size = 10)
   {
     std::vector<std::vector<octomap::OcTreeKey>> clusters;
     if (roi_keys.size() == 0) return clusters;
@@ -169,7 +197,8 @@ public:
           }
         }
       }
-      clusters.push_back(currentCluster);
+      if (currentCluster.size() >= min_cluster_size)
+        clusters.push_back(currentCluster);
     }
     return clusters;
   }
