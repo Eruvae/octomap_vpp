@@ -203,6 +203,22 @@ public:
     return clusters;
   }
 
+  double getDiscoveredRatio(const octomap::point3d &min, const octomap::point3d &max)
+  {
+    size_t known_cnt = 0;
+    octomap::OcTreeKey minKey, maxKey;
+    if (!this->coordToKeyChecked(min, minKey) || !this->coordToKeyChecked(max, maxKey))
+      return -1;
+
+    size_t total_cnt = (maxKey[0] - minKey[0]) * (maxKey[1] - minKey[1]) * (maxKey[2] - minKey[2]);
+    for (leaf_bbx_iterator it = this->begin_leafs_bbx(minKey, maxKey), end = this->end_leafs_bbx(); it != end; it++)
+    {
+      if (it->getLogOdds() != 0) // known; could be replaced with range
+        known_cnt++;
+    }
+    return (double)known_cnt / (double)total_cnt;
+  }
+
   inline size_t getRoiSize() {return roi_keys.size();}
   inline size_t getAddedRoiSize() {return added_rois.size();}
   inline size_t getDeletedRoiSize() {return deleted_rois.size();}
