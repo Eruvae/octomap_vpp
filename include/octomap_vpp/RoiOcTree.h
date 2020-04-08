@@ -122,6 +122,16 @@ public:
     return roi_keys;
   }
 
+  void computeRoiKeys()
+  {
+    roi_keys.clear();
+    for (auto it = this->begin_leafs(), end = this->end_leafs(); it != end; it++)
+    {
+      if(isNodeROI(*it))
+        roi_keys.insert(it.getKey());
+    }
+  }
+
   std::vector<octomap::point3d> getClusterCenters(size_t min_cluster_size = 10)
   {
     std::vector<std::vector<octomap::OcTreeKey>> clusters = computeClusters(min_cluster_size);
