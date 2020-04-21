@@ -149,7 +149,7 @@ public:
     return clusterCenters;
   }
 
-  std::pair<std::vector<octomap::point3d>, std::vector<octomap::point3d>> getClusterCentersWithVolume(size_t min_cluster_size = 10)
+  std::pair<std::vector<octomap::point3d>, std::vector<octomap::point3d>> getClusterCentersWithVolume(size_t min_cluster_size = 4)
   {
     std::vector<std::vector<octomap::OcTreeKey>> clusters = computeClusters(min_cluster_size);
     std::pair<std::vector<octomap::point3d>, std::vector<octomap::point3d>> clusterCenters;
@@ -177,7 +177,7 @@ public:
     return clusterCenters;
   }
 
-  std::vector<std::vector<octomap::OcTreeKey>> computeClusters(size_t min_cluster_size = 10)
+  std::vector<std::vector<octomap::OcTreeKey>> computeClusters(size_t min_cluster_size = 4)
   {
     std::vector<std::vector<octomap::OcTreeKey>> clusters;
     if (roi_keys.size() == 0) return clusters;
