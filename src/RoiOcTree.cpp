@@ -217,26 +217,29 @@ RoiOcTreeNode* RoiOcTree::updateNodeRoiRecurs(RoiOcTreeNode* node, bool node_jus
     }
 }
 
-std::shared_ptr<InflatedRoiOcTree> RoiOcTree::computeInflatedRois()
+std::shared_ptr<InflatedRoiOcTree> RoiOcTree::computeInflatedRois(double resolution, double inflation_radius)
 {
   //std::vector<octomap::OcTreeKey> roiKeys = getRoiKeys();
   //if (roi_keys.size() == 0)
   //  return NULL;
 
-  if (added_rois.empty() && deleted_rois.empty()) // no changes, return existing tree
+  double previous_resolution = inflated_rois ? inflated_rois->getResolution() : 0.0;
+  double previous_inflation_radius = inflated_rois ? inflated_rois->getInfluenceRadius() : 0.0;
+
+  if (added_rois.empty() && deleted_rois.empty() && (resolution == previous_resolution) && (inflation_radius == previous_inflation_radius)) // no changes, return existing tree
     return inflated_rois;
 
   bool full_construct = false;
-  if (inflated_rois == nullptr || !deleted_rois.empty())
+  if (inflated_rois == nullptr || !deleted_rois.empty() || resolution != previous_resolution || inflation_radius != previous_inflation_radius)
   {
-    inflated_rois.reset(new InflatedRoiOcTree(0.05));
+    inflated_rois.reset(new InflatedRoiOcTree(resolution, inflation_radius));
+    inflated_roi_keys.clear();
     full_construct = true;
   }
 
   //InflatedRoiOcTree *inflatedTree = new InflatedRoiOcTree(this->resolution);
 
-  typedef std::unordered_map<octomap::OcTreeKey, float, octomap::OcTreeKey::KeyHash> KeyFloatMap;
-  typedef std::unordered_set<octomap::OcTreeKey, octomap::OcTreeKey::KeyHash> KeySet;
+  typedef octomap::unordered_ns::unordered_map<octomap::OcTreeKey, float, octomap::OcTreeKey::KeyHash> KeyFloatMap;
 
   /*struct cmp_fkey_pair {
     bool operator() (const std::pair<float, octomap::OcTreeKey>& lhs, const std::pair<float, octomap::OcTreeKey>& rhs) const
@@ -246,7 +249,7 @@ std::shared_ptr<InflatedRoiOcTree> RoiOcTree::computeInflatedRois()
 
   KeyFloatMap keyMap;
   //SortedFloatKeySet floatKeySet;
-  KeySet processedKeys;
+  octomap::KeySet processedKeys;
 
   float maxVal = inflated_rois->getMaxRoiVal();
   float stepReduction = maxVal / inflated_rois->getInfluenceRadius() * inflated_rois->getResolution() ;
@@ -321,6 +324,7 @@ std::shared_ptr<InflatedRoiOcTree> RoiOcTree::computeInflatedRois()
     }
   }
   inflated_rois->updateInnerVals();
+  inflated_roi_keys.insert(processedKeys.begin(), processedKeys.end());
   added_rois.clear();
   deleted_rois.clear();
   return inflated_rois;

@@ -6,8 +6,7 @@
 #include "octomap/octomap_utils.h"
 #include <vector>
 #include <string>
-#include <unordered_map>
-#include <unordered_set>
+#include <octomap/OcTreeKey.h>
 #include <queue>
 #include <memory>
 //#include <ros/ros.h>
@@ -235,7 +234,9 @@ public:
 
   inline std::shared_ptr<InflatedRoiOcTree> getInflatedRois() {return inflated_rois;}
 
-  std::shared_ptr<InflatedRoiOcTree> computeInflatedRois();
+  inline octomap::KeySet getInflatedRoiKeys() {return inflated_roi_keys;}
+
+  std::shared_ptr<InflatedRoiOcTree> computeInflatedRois(double resolution = 0.05, double inflation_radius = 0.5);
 
   void updateNodeRoiLogOdds(RoiOcTreeNode* node, const float& update) const;
 
@@ -398,6 +399,7 @@ public:
 protected:
   float roi_prob_thres_log;
   std::shared_ptr<InflatedRoiOcTree> inflated_rois;
+  octomap::KeySet inflated_roi_keys;
 
   octomap::KeySet added_rois;
   octomap::KeySet deleted_rois;

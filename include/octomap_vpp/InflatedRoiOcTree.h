@@ -39,7 +39,7 @@ public:
 class InflatedRoiOcTree : public octomap::OcTreeBase<InflatedRoiOcTreeNode>
 {
 public:
-  InflatedRoiOcTree(double resolution);
+  InflatedRoiOcTree(double resolution, double influence_radius = 0.5, double max_roi_val = 1.0);
 
   virtual InflatedRoiOcTree* create() const {return new InflatedRoiOcTree(resolution); }
 
@@ -132,15 +132,15 @@ public:
     }
   }
 
-  float getMaxRoiVal() {return max_roi_val;}
   float getInfluenceRadius() {return influence_radius;}
+  float getMaxRoiVal() {return max_roi_val;}
 
-  void setMaxRoiVal(float val) {max_roi_val = val;}
   void setInfluenceRadius(float radius) {influence_radius = radius;}
+  void setMaxRoiVal(float val) {max_roi_val = val;}
 
 protected:
-  float max_roi_val;
-  float influence_radius;
+  double influence_radius;
+  double max_roi_val;
 
   /**
    * Static member object which ensures that this OcTree's prototype
