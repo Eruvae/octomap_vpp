@@ -4,6 +4,23 @@
 #include <octomap/OcTreeKey.h>
 #include <octomap/octomap_types.h>
 #include <ostream>
+#include <unordered_map>
+#include <boost/functional/hash.hpp>
+
+namespace std
+{
+  template<> struct hash<octomap::point3d>
+  {
+    size_t operator()(octomap::point3d const& p) const noexcept
+    {
+      size_t seed = 0;
+      boost::hash_combine(seed, p.x());
+      boost::hash_combine(seed, p.y());
+      boost::hash_combine(seed, p.z());
+      return seed;
+    }
+  };
+}
 
 namespace octomap_vpp
 {
@@ -322,6 +339,150 @@ struct Triangle
   size_t indices[3];
 };
 
+static std::vector<octomap::point3d_collection> computeClusterVertices(const octomap::point3d_collection &vertices, const std::vector<std::vector<size_t>> &clusters)
+{
+  std::vector<octomap::point3d_collection> vertexClusters;
+  vertexClusters.reserve(clusters.size());
+  for (const std::vector<size_t> &cluster : clusters)
+  {
+    octomap::point3d_collection coll;
+    coll.reserve(cluster.size());
+    for (size_t ind : cluster)
+    {
+      coll.push_back(vertices[ind]);
+    }
+    vertexClusters.push_back(coll);
+  }
+  return vertexClusters;
+}
+
+static std::vector<std::vector<size_t>> computeFaceClusters(std::vector<Triangle> &faces)
+{
+  // ALGO 1
+  std::unordered_map<size_t, size_t> cluster_map;
+  std::vector<std::vector<size_t>> clusters;
+  for (const Triangle &tri : faces)
+  {
+    std::vector<size_t> connected_clusters;
+    for (size_t i = 0; i < 3; i++)
+    {
+      auto it = cluster_map.find(tri.indices[i]);
+      if (it != cluster_map.end())
+        connected_clusters.push_back(it->second);
+    }
+    if (connected_clusters.empty()) // create new cluster
+    {
+      std::vector<size_t> cluster;
+      for (size_t i = 0; i < 3; i++)
+      {
+        cluster.push_back(tri.indices[i]);
+        cluster_map[tri.indices[i]] = clusters.size();
+      }
+      clusters.push_back(cluster);
+    }
+    else
+    {
+      size_t cluster_ind = connected_clusters[0];
+      for (size_t i = 1; i < connected_clusters.size(); i++) // combine clusters if necessary
+      {
+        for (size_t ind : clusters[connected_clusters[i]])
+        {
+          clusters[cluster_ind].push_back(ind);
+          cluster_map[ind] = cluster_ind;
+        }
+        clusters[connected_clusters[i]].clear();
+      }
+      // Insert new points to cluster
+      for (size_t i = 0; i < 3; i++)
+      {
+        auto it = cluster_map.find(tri.indices[i]);
+        if (it != cluster_map.end())
+        {
+          clusters[cluster_ind].push_back(tri.indices[i]);
+          cluster_map[tri.indices[i]] = cluster_ind;
+        }
+      }
+    }
+  }
+  // Remove empty clusters
+  for (auto it = clusters.begin(); it != clusters.end();)
+  {
+    if (it->empty())
+      clusters.erase(it);
+    else
+      it++;
+  }
+  return clusters;
+
+  //ALGO 2
+  /*std::unordered_multimap<size_t, size_t> vertind_face_map;
+  for (size_t i = 0; i < faces.size(); i++)
+  {
+    for (size_t j = 0; j < 3; i++)
+    {
+      vertind_face_map.insert(std::make_pair(tri.indices[j], i));
+    }
+  }
+  std::vector<std::vector<size_t>> clusters;
+  while(!vertind_face_map.empty())
+  {
+    auto start_vert = vertind_face_map.begin();
+    std::deque<size_t> faces_to_process;
+    faces_to_process.push_back(start_vert->second);
+    std::vector<size_t> cluster;
+    while (!vertices_to_process.empty())
+    {
+      size_t current_face = faces_to_process.front();
+      faces_to_process.pop_front();
+      for (size_t i = 0; i < 3; i++)
+      {
+        auto range = vertind_face_map.equal_range(faces[current_face].indices[i]); // find all faces associated with vertex
+        for (auto it = range.first; it != range.second; ++it) {
+          if (it->second != current_face)
+          {
+            faces_to_process.push_front();
+          }
+        }
+      }
+
+
+    }
+    clusters.push_back(cluster);
+  }*/
+}
+
+static inline octomap::KeySet computeInflatedKeySet(const octomap::KeySet &input_keys)
+{
+  octomap::KeySet keys;
+  for (const octomap::OcTreeKey &baseKey : input_keys)
+  {
+    for (size_t i = 0; i < 8; i++)
+    {
+      // subtract gridInds to find keys which grid includes this key
+      octomap::OcTreeKey key(baseKey[0] - gridInds[i][0], baseKey[1] - gridInds[i][1], baseKey[2] - gridInds[i][2]);
+      keys.insert(key);
+    }
+  }
+  return keys;
+}
+
+template<class TREE>
+static inline octomap::KeySet computeInflatedKeySetTree(const TREE &tree)
+{
+  octomap::KeySet keys;
+  for (auto it = tree.begin_leafs(), end = tree.end_leafs(); it != end; it++)
+  {
+    const octomap::OcTreeKey &baseKey = it.getKey();
+    for (size_t i = 0; i < 8; i++)
+    {
+      // subtract gridInds to find keys which grid includes this key
+      octomap::OcTreeKey key(baseKey[0] - gridInds[i][0], baseKey[1] - gridInds[i][1], baseKey[2] - gridInds[i][2]);
+      keys.insert(key);
+    }
+  }
+  return keys;
+}
+
 template<class TREE>
 static inline Gridcell computeGridcell(const TREE &tree, const octomap::OcTreeKey &baseKey, bool (*isOcc)(const TREE &tree, const typename TREE::NodeType*))
 {
@@ -337,128 +498,107 @@ static inline Gridcell computeGridcell(const TREE &tree, const octomap::OcTreeKe
 }
 
 template<class TREE>
-void polygonize(const TREE &tree, std::vector<octomap::point3d> &vertices, std::vector<Triangle> &faces, bool (*isOcc)(const TREE &tree, const typename TREE::NodeType*))
+void _polygonize(const TREE &tree, const octomap::KeySet &inflatedKeys, std::vector<octomap::point3d> &vertices, std::vector<Triangle> &faces, bool (*isOcc)(const TREE &tree, const typename TREE::NodeType*))
 {
-  // find out tree bounds
-  const octomap::key_type KMIN = std::numeric_limits<octomap::key_type>::lowest();
-  const octomap::key_type KMAX = std::numeric_limits<octomap::key_type>::max();
-  octomap::OcTreeKey minKey(KMAX, KMAX, KMAX);
-  octomap::OcTreeKey maxKey(KMIN, KMIN, KMIN);
-  for (auto it = tree.begin_leafs(), end = tree.end_leafs(); it != end; it++)
-  {
-    octomap::OcTreeKey key = it.getKey();
-    if (key[0] < minKey[0]) minKey[0] = key[0];
-    if (key[1] < minKey[1]) minKey[1] = key[1];
-    if (key[2] < minKey[2]) minKey[2] = key[2];
-    if (key[0] > maxKey[0]) maxKey[0] = key[0];
-    if (key[1] > maxKey[1]) maxKey[1] = key[1];
-    if (key[2] > maxKey[2]) maxKey[2] = key[2];
-  }
+  // Vertex map to quickly find indices of already used vertices
+  std::unordered_map<octomap::point3d, size_t> vertex_map;
+  vertices.clear();
+  faces.clear();
 
-  // loop through grid
-  octomap::OcTreeKey curKey = minKey;
-  for (curKey[0] = minKey[0]; curKey[0] < maxKey[0]; curKey[0]++)
+  // loop through computed keys
+  for (const octomap::OcTreeKey &curKey : inflatedKeys)
   {
-    for (curKey[1] = minKey[1]; curKey[1] < maxKey[1]; curKey[1]++)
+    Gridcell grid = computeGridcell(tree, curKey, isOcc);
+
+    /*
+        Determine the index into the edge table which
+        tells us which vertices are inside of the surface
+     */
+    int cubeindex = 0;
+    if (grid.occ[0]) cubeindex |= 1;
+    if (grid.occ[1]) cubeindex |= 2;
+    if (grid.occ[2]) cubeindex |= 4;
+    if (grid.occ[3]) cubeindex |= 8;
+    if (grid.occ[4]) cubeindex |= 16;
+    if (grid.occ[5]) cubeindex |= 32;
+    if (grid.occ[6]) cubeindex |= 64;
+    if (grid.occ[7]) cubeindex |= 128;
+
+    /* Cube is entirely in/out of the surface */
+    if (edgeTable[cubeindex] == 0)
+      continue;
+
+    /* Find the vertices where the surface intersects the cube */
+    octomap::point3d verts[12];
+    int vertinds[12];
+    if (edgeTable[cubeindex] & 1)
+      verts[0] = (grid.p[0] + grid.p[1]) * 0.5;
+    if (edgeTable[cubeindex] & 2)
+      verts[1] = (grid.p[1] + grid.p[2]) * 0.5;
+    if (edgeTable[cubeindex] & 4)
+      verts[2] = (grid.p[2] + grid.p[3]) * 0.5;
+    if (edgeTable[cubeindex] & 8)
+      verts[3] = (grid.p[3] + grid.p[0]) * 0.5;
+    if (edgeTable[cubeindex] & 16)
+      verts[4] = (grid.p[4] + grid.p[5]) * 0.5;
+    if (edgeTable[cubeindex] & 32)
+      verts[5] = (grid.p[5] + grid.p[6]) * 0.5;
+    if (edgeTable[cubeindex] & 64)
+      verts[6] = (grid.p[6] + grid.p[7]) * 0.5;
+    if (edgeTable[cubeindex] & 128)
+      verts[7] = (grid.p[7] + grid.p[4]) * 0.5;
+    if (edgeTable[cubeindex] & 256)
+      verts[8] = (grid.p[0] + grid.p[4]) * 0.5;
+    if (edgeTable[cubeindex] & 512)
+      verts[9] = (grid.p[1] + grid.p[5]) * 0.5;
+    if (edgeTable[cubeindex] & 1024)
+      verts[10] = (grid.p[2] + grid.p[6]) * 0.5;
+    if (edgeTable[cubeindex] & 2048)
+      verts[11] = (grid.p[3] + grid.p[7]) * 0.5;
+
+    for (size_t i = 0; i < 12; i++)
     {
-      for (curKey[2] = minKey[2]; curKey[2] < maxKey[2]; curKey[2]++)
+      auto it = vertex_map.find(verts[i]);
+      if (it == vertex_map.end())
       {
-        Gridcell grid = computeGridcell(tree, curKey, isOcc);
-
-        /*
-            Determine the index into the edge table which
-            tells us which vertices are inside of the surface
-         */
-        int cubeindex = 0;
-        if (grid.occ[0]) cubeindex |= 1;
-        if (grid.occ[1]) cubeindex |= 2;
-        if (grid.occ[2]) cubeindex |= 4;
-        if (grid.occ[3]) cubeindex |= 8;
-        if (grid.occ[4]) cubeindex |= 16;
-        if (grid.occ[5]) cubeindex |= 32;
-        if (grid.occ[6]) cubeindex |= 64;
-        if (grid.occ[7]) cubeindex |= 128;
-
-        /* Cube is entirely in/out of the surface */
-        if (edgeTable[cubeindex] == 0)
-          continue;
-
-        /* Find the vertices where the surface intersects the cube */
-        int vertinds[12];
-        if (edgeTable[cubeindex] & 1)
-        {
-          vertinds[0] = vertices.size();
-          vertices.push_back((grid.p[0] + grid.p[1]) * 0.5);
-        }
-        if (edgeTable[cubeindex] & 2)
-        {
-          vertinds[1] = vertices.size();
-          vertices.push_back((grid.p[1] + grid.p[2]) * 0.5);
-        }
-        if (edgeTable[cubeindex] & 4)
-        {
-          vertinds[2] = vertices.size();
-          vertices.push_back((grid.p[2] + grid.p[3]) * 0.5);
-        }
-        if (edgeTable[cubeindex] & 8)
-        {
-          vertinds[3] = vertices.size();
-          vertices.push_back((grid.p[3] + grid.p[0]) * 0.5);
-        }
-        if (edgeTable[cubeindex] & 16)
-        {
-          vertinds[4] = vertices.size();
-          vertices.push_back((grid.p[4] + grid.p[5]) * 0.5);
-        }
-        if (edgeTable[cubeindex] & 32)
-        {
-          vertinds[5] = vertices.size();
-          vertices.push_back((grid.p[5] + grid.p[6]) * 0.5);
-        }
-        if (edgeTable[cubeindex] & 64)
-        {
-          vertinds[6] = vertices.size();
-          vertices.push_back((grid.p[6] + grid.p[7]) * 0.5);
-        }
-        if (edgeTable[cubeindex] & 128)
-        {
-          vertinds[7] = vertices.size();
-          vertices.push_back((grid.p[7] + grid.p[4]) * 0.5);
-        }
-        if (edgeTable[cubeindex] & 256)
-        {
-          vertinds[8] = vertices.size();
-          vertices.push_back((grid.p[0] + grid.p[4]) * 0.5);
-        }
-        if (edgeTable[cubeindex] & 512)
-        {
-          vertinds[9] = vertices.size();
-          vertices.push_back((grid.p[1] + grid.p[5]) * 0.5);
-        }
-        if (edgeTable[cubeindex] & 1024)
-        {
-          vertinds[10] = vertices.size();
-          vertices.push_back((grid.p[2] + grid.p[6]) * 0.5);
-        }
-        if (edgeTable[cubeindex] & 2048)
-        {
-          vertinds[11] = vertices.size();
-          vertices.push_back((grid.p[3] + grid.p[7]) * 0.5);
-        }
-
-        /* Create the triangle */
-        for (size_t i=0; triTable[cubeindex][i]!=-1;i+=3)
-        {
-          Triangle tri;
-          tri.indices[0] = vertinds[triTable[cubeindex][i]];
-          tri.indices[1] = vertinds[triTable[cubeindex][i+1]];
-          tri.indices[2] = vertinds[triTable[cubeindex][i+2]];
-          faces.push_back(tri);
-        }
+        vertinds[i] = vertices.size();
+        vertex_map[verts[i]] = vertices.size();
+        vertices.push_back(verts[i]);
       }
+      else
+      {
+        vertinds[i] = it->second;
+      }
+    }
+
+    /* Create the triangle */
+    for (size_t i=0; triTable[cubeindex][i]!=-1;i+=3)
+    {
+      Triangle tri;
+      tri.indices[0] = vertinds[triTable[cubeindex][i]];
+      tri.indices[1] = vertinds[triTable[cubeindex][i+1]];
+      tri.indices[2] = vertinds[triTable[cubeindex][i+2]];
+      faces.push_back(tri);
     }
   }
 }
+
+template<class TREE>
+void polygonize(const TREE &tree, std::vector<octomap::point3d> &vertices, std::vector<Triangle> &faces, bool (*isOcc)(const TREE &tree, const typename TREE::NodeType*))
+{
+  // Compute keys to consider for polygonization
+  octomap::KeySet inflatedKeys = computeInflatedKeySetTree(tree);
+  _polygonize(tree, inflatedKeys, vertices, faces, isOcc);
+}
+
+template<class TREE>
+void polygonizeSubset(const TREE &tree, const octomap::KeySet &keys,  std::vector<octomap::point3d> &vertices, std::vector<Triangle> &faces, bool (*isOcc)(const TREE &tree, const typename TREE::NodeType*))
+{
+  // Compute keys to consider for polygonization
+  octomap::KeySet inflatedKeys = computeInflatedKeySet(keys);
+  _polygonize(tree, inflatedKeys, vertices, faces, isOcc);
+}
+
 
 static inline void generateObj(std::ostream &os, const std::vector<octomap::point3d> &vertices, const std::vector<Triangle> &faces)
 {
