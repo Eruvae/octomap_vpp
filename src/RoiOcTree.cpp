@@ -1,4 +1,5 @@
 #include "octomap_vpp/RoiOcTree.h"
+#include <boost/heap/fibonacci_heap.hpp>
 
 namespace octomap_vpp
 {
@@ -219,10 +220,6 @@ RoiOcTreeNode* RoiOcTree::updateNodeRoiRecurs(RoiOcTreeNode* node, bool node_jus
 
 std::shared_ptr<InflatedRoiOcTree> RoiOcTree::computeInflatedRois(double resolution, double inflation_radius)
 {
-  //std::vector<octomap::OcTreeKey> roiKeys = getRoiKeys();
-  //if (roi_keys.size() == 0)
-  //  return NULL;
-
   double previous_resolution = inflated_rois ? inflated_rois->getResolution() : 0.0;
   double previous_inflation_radius = inflated_rois ? inflated_rois->getInfluenceRadius() : 0.0;
 
@@ -237,18 +234,25 @@ std::shared_ptr<InflatedRoiOcTree> RoiOcTree::computeInflatedRois(double resolut
     full_construct = true;
   }
 
-  //InflatedRoiOcTree *inflatedTree = new InflatedRoiOcTree(this->resolution);
+  struct KeyWithPrio
+  {
+    KeyWithPrio(const octomap::OcTreeKey &key, float prio) : key(key), prio(prio) {}
 
-  typedef octomap::unordered_ns::unordered_map<octomap::OcTreeKey, float, octomap::OcTreeKey::KeyHash> KeyFloatMap;
+    octomap::OcTreeKey key;
+    float prio;
 
-  /*struct cmp_fkey_pair {
-    bool operator() (const std::pair<float, octomap::OcTreeKey>& lhs, const std::pair<float, octomap::OcTreeKey>& rhs) const
-    {return lhs.first > rhs.first;}
+    bool operator< (const KeyWithPrio &rhs) const
+    {
+      return prio < rhs.prio;
+    }
   };
-  typedef std::set<std::pair<float, octomap::OcTreeKey>, cmp_fkey_pair> SortedFloatKeySet;*/
 
-  KeyFloatMap keyMap;
-  //SortedFloatKeySet floatKeySet;
+  typedef boost::heap::fibonacci_heap<KeyWithPrio> ValueHeap;
+  typedef octomap::unordered_ns::unordered_map<octomap::OcTreeKey, ValueHeap::handle_type, octomap::OcTreeKey::KeyHash> KeyHandleMap;
+
+
+  ValueHeap nodeVals;
+  KeyHandleMap openKeys;
   octomap::KeySet processedKeys;
 
   float maxVal = inflated_rois->getMaxRoiVal();
@@ -257,35 +261,21 @@ std::shared_ptr<InflatedRoiOcTree> RoiOcTree::computeInflatedRois(double resolut
   const octomap::KeySet &keysToAdd = full_construct ? roi_keys : added_rois;
   for (const octomap::OcTreeKey &key : keysToAdd)
   {
-    if (this->getResolution() == inflated_rois->getResolution())
-      keyMap[key] = maxVal;
-      //floatKeySet.insert(std::make_pair(maxVal, key));
-    else
-      keyMap[inflated_rois->coordToKey(this->keyToCoord(key))] = maxVal;
+    octomap::OcTreeKey infl_key = inflated_rois->coordToKey(this->keyToCoord(key));
+    ValueHeap::handle_type handle = nodeVals.push(KeyWithPrio(infl_key, maxVal));
+    openKeys[infl_key] = handle;
   }
-  while(!keyMap.empty())
+  while(!nodeVals.empty())
   {
-    KeyFloatMap::iterator maxIt = std::max_element
-    (
-        keyMap.begin(), keyMap.end(),
-        [] (const KeyFloatMap::value_type &p1, const KeyFloatMap::value_type &p2) {
-            return p1.second < p2.second;
-        }
-    );
-    octomap::OcTreeKey curKey = maxIt->first;
-    float curVal = maxIt->second;
-    keyMap.erase(maxIt);
+    ValueHeap::ordered_iterator maxIt = nodeVals.ordered_begin();
+    octomap::OcTreeKey curKey = maxIt->key;
+    float curVal = maxIt->prio;
+    ValueHeap::handle_type handle = openKeys[curKey];
+    nodeVals.erase(handle);
+    openKeys.erase(curKey);
     inflated_rois->updateNodeVal(curKey, curVal, true, !full_construct);
     processedKeys.insert(curKey);
-    /*SortedFloatKeySet::iterator maxIt = floatKeySet.begin();
-    octomap::OcTreeKey curKey = maxIt->second;
-    float curVal = maxIt->first;
-    floatKeySet.erase(maxIt);
-    keyMap.erase(curKey);
-    inflated_rois->updateNodeVal(curKey, curVal, true, !full_construct);
-    processedKeys.insert(curKey);*/
 
-    #pragma omp parallel for collapse(3)
     for (int i = -1; i <= 1; i++)
     {
       for (int j = -1; j <= 1; j++)
@@ -298,26 +288,26 @@ std::shared_ptr<InflatedRoiOcTree> RoiOcTree::computeInflatedRois(double resolut
           else if (coordDiff == 1) newNeighbourVal = curVal - stepReduction;
           else if (coordDiff == 2) newNeighbourVal = curVal - stepReduction * sqrt(2);
           else /* coordDiff == 3*/ newNeighbourVal = curVal - stepReduction * sqrt(3);
+
           if (newNeighbourVal <= 0) continue; // new value is out of influence radius
 
           octomap::OcTreeKey neighbourKey(curKey[0] + i, curKey[1] + j, curKey[2] + k);
           if (processedKeys.find(neighbourKey) != processedKeys.end()) continue; // already processed keys can be ignored
 
-          KeyFloatMap::iterator it = keyMap.find(neighbourKey);
-          if (it != keyMap.end()) // key already known, check if update needed
+          auto it = openKeys.find(neighbourKey);
+          if (it != openKeys.end()) // key already known, check if update needed
           {
-            if (newNeighbourVal > it->second) // only update if new value would be higher
+            ValueHeap::handle_type handle = it->second;
+            if (newNeighbourVal > (*handle).prio) // only update if new value would be higher
             {
-              //SortedFloatKeySet::iterator set_it = floatKeySet.find(std::make_pair(it->second, it->first));
-              //floatKeySet.erase(set_it);
-              it->second = newNeighbourVal;
-              //floatKeySet.insert(std::make_pair(it->second, it->first));
+              (*handle).prio = newNeighbourVal;
+              nodeVals.increase(handle);
             }
           }
           else // otherwise, enter new key to map
           {
-            keyMap[neighbourKey] = newNeighbourVal;
-            //floatKeySet.insert(std::make_pair(newNeighbourVal, neighbourKey));
+            ValueHeap::handle_type handle = nodeVals.push(KeyWithPrio(neighbourKey, newNeighbourVal));
+            openKeys[neighbourKey] = handle;
           }
         }
       }
