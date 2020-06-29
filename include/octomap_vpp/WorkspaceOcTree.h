@@ -5,6 +5,7 @@
 #include <octomap/OcTreeBase.h>
 
 #include "CountingOcTree.h"
+#include "roioctree_utils.h"
 
 namespace octomap_vpp
 {
@@ -47,16 +48,38 @@ public:
   void updateInnerVals();
   void updateInnerValsRecurs(WorkspaceNode* node, unsigned int depth);
 
-  inline float getReachability(const octomap::OcTreeKey &key, unsigned int depth = 0)
+  inline float getReachability(const octomap::OcTreeKey &key, unsigned int depth = 0) const
   {
     WorkspaceNode *node = search(key, depth);
     return node ? node->getValue() : 0.f;
   }
 
-  inline float getReachability(const octomap::point3d &point, unsigned int depth = 0)
+  inline float getReachability(const octomap::point3d &point, unsigned int depth = 0) const
   {
     WorkspaceNode *node = search(point, depth);
     return node ? node->getValue() : 0.f;
+  }
+
+  inline octomap::point3d computeGradient(const octomap::OcTreeKey &key, unsigned int depth = 0) const
+  {
+    float rb = getReachability(key, depth);
+    octomap::point3d gradient;
+    for (size_t i = 0; i < 26; i++)
+    {
+      octomap::OcTreeKey nKey(key[0] + nb26Lut[i][0], key[1] + nb26Lut[i][1], key[2] + nb26Lut[i][2]);
+      octomap::point3d dirVec(nb26Lut[i][0], nb26Lut[i][1], nb26Lut[i][2]);
+      //dirVec.normalize();
+      float nrb = getReachability(nKey, depth);
+      float diff = nrb - rb;
+      gradient += dirVec * diff;
+    }
+    gradient /= 26;
+    return gradient;
+  }
+
+  inline octomap::point3d computeGradient(const octomap::point3d &point, unsigned int depth = 0) const
+  {
+    return computeGradient(depth == 0 ? coordToKey(point) : coordToKey(point, depth), depth);
   }
 
 protected:
