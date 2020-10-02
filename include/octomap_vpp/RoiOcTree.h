@@ -121,9 +121,16 @@ public:
     return roi_keys;
   }
 
-  void computeRoiKeys()
+  void clearRoiKeys()
   {
     roi_keys.clear();
+    added_rois.clear();
+    deleted_rois.clear();
+  }
+
+  void computeRoiKeys()
+  {
+    clearRoiKeys();
     for (auto it = this->begin_leafs(), end = this->end_leafs(); it != end; it++)
     {
       if(isNodeROI(*it))
