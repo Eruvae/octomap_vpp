@@ -138,9 +138,9 @@ public:
     }
   }
 
-  std::vector<octomap::point3d> getClusterCenters(size_t min_cluster_size = 10)
+  std::vector<octomap::point3d> getClusterCenters(size_t min_cluster_size = 10, Neighborhood nbhd = NB_26)
   {
-    std::vector<std::vector<octomap::OcTreeKey>> clusters = computeClusters(min_cluster_size);
+    std::vector<std::vector<octomap::OcTreeKey>> clusters = computeClusters(min_cluster_size, nbhd);
     std::vector<octomap::point3d> clusterCenters;
     for (auto &cluster : clusters)
     {
@@ -155,9 +155,9 @@ public:
     return clusterCenters;
   }
 
-  std::pair<std::vector<octomap::point3d>, std::vector<octomap::point3d>> getClusterCentersWithVolume(size_t min_cluster_size = 4)
+  std::pair<std::vector<octomap::point3d>, std::vector<octomap::point3d>> getClusterCentersWithVolume(size_t min_cluster_size = 10, Neighborhood nbhd = NB_26)
   {
-    std::vector<std::vector<octomap::OcTreeKey>> clusters = computeClusters(min_cluster_size);
+    std::vector<std::vector<octomap::OcTreeKey>> clusters = computeClusters(min_cluster_size, nbhd);
     std::pair<std::vector<octomap::point3d>, std::vector<octomap::point3d>> clusterCenters;
     const float FMIN = -std::numeric_limits<float>::infinity();
     const float FMAX = std::numeric_limits<float>::infinity();
@@ -183,7 +183,7 @@ public:
     return clusterCenters;
   }
 
-  std::vector<std::vector<octomap::OcTreeKey>> computeClusters(size_t min_cluster_size = 4)
+  std::vector<std::vector<octomap::OcTreeKey>> computeClusters(size_t min_cluster_size = 10, Neighborhood nbhd = NB_26)
   {
     std::vector<std::vector<octomap::OcTreeKey>> clusters;
     if (roi_keys.size() == 0) return clusters;
@@ -200,11 +200,11 @@ public:
         octomap::OcTreeKey curKey = nbsToProcess.front();
         nbsToProcess.pop_front();
         currentCluster.push_back(curKey);
-        for (size_t i = 0; i < 18; i++)
+        for (size_t i = 0; i < nbhd; i++)
         {
           //octomap::OcTreeKey neighbourKey(curKey);
           //neighbourKey[i/2] += i%2 ? 1 : -1;
-          octomap::OcTreeKey neighbourKey(curKey[0] + nb18Lut[i][0], curKey[1] + nb18Lut[i][1], curKey[2] + nb18Lut[i][2]);
+          octomap::OcTreeKey neighbourKey(curKey[0] + nbLut[i][0], curKey[1] + nbLut[i][1], curKey[2] + nbLut[i][2]);
           it = roisToProcess.find(neighbourKey);
           if (it != roisToProcess.end())
           {
