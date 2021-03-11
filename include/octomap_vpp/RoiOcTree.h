@@ -288,6 +288,36 @@ public:
     return roi_val;
   }
 
+  NodeState getNodeState(const octomap_vpp::RoiOcTreeNode *node, NodeProperty prop)
+  {
+    if (node == nullptr) return NodeState::UNKNOWN;
+    float logodds = (prop == NodeProperty::ROI) ? node->getRoiLogOdds() : node->getLogOdds();
+    if (logodds < 0) return NodeState::FREE_NONROI;
+    else if (logodds > 0 ) return NodeState::OCCUPIED_ROI;
+    else return NodeState::UNKNOWN;
+  }
+
+  void getNeighborsInState(const octomap::OcTreeKey &key, octomap::KeySet &neighbors, NodeProperty prop, NodeState state, Neighborhood nbs, unsigned int depth = 0)
+  {
+    for (int i = 0; i < nbs; i++)
+    {
+      octomap::OcTreeKey neighbour_key(key[0] + octomap_vpp::nbLut[i][0], key[1] + octomap_vpp::nbLut[i][1], key[2] + octomap_vpp::nbLut[i][2]);
+      const octomap_vpp::RoiOcTreeNode *node = search(neighbour_key, depth);
+      if (getNodeState(node, prop) == state) neighbors.insert(neighbour_key);
+    }
+  }
+
+  bool hasNeighborInState(const octomap::OcTreeKey &key, NodeProperty prop, NodeState state, Neighborhood nbs, unsigned int depth = 0)
+  {
+    for (int i = 0; i < nbs; i++)
+    {
+      octomap::OcTreeKey neighbour_key(key[0] + octomap_vpp::nbLut[i][0], key[1] + octomap_vpp::nbLut[i][1], key[2] + octomap_vpp::nbLut[i][2]);
+      octomap_vpp::RoiOcTreeNode *node = search(neighbour_key, depth);
+      if (getNodeState(node, prop) == state) return true;
+    }
+    return false;
+  }
+
   double computeCellEntropy(const octomap::OcTreeKey &key)
   {
     RoiOcTreeNode *node = search(key);

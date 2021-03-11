@@ -7,6 +7,14 @@
 namespace octomap_vpp
 {
 
+enum class NodeProperty {
+    OCCUPANCY, ROI
+};
+
+enum class NodeState {
+    UNKNOWN, FREE_NONROI, OCCUPIED_ROI
+};
+
 enum Neighborhood {
   NB_6 = 6, NB_18 = 18, NB_26 = 26
 };
