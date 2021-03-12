@@ -1,5 +1,5 @@
-#ifndef OCTOMAP_PCL_H
-#define OCTOMAP_PCL_H
+#ifndef OCTOMAP_TRANSFORMS_H
+#define OCTOMAP_TRANSFORMS_H
 
 #include <tf2/convert.h>
 #include <tf2/utils.h>
@@ -40,4 +40,4 @@ inline static octomath::Pose6D transformToOctomath(const geometry_msgs::Transfor
 
 } // namespace octomap_vpp
 
-#endif // OCTOMAP_PCL_H
+#endif // OCTOMAP_TRANSFORMS_H
