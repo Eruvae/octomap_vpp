@@ -60,7 +60,7 @@ public:
 
   inline unsigned int getCount() const { return getValue(); }
   inline void increaseCount() { value++; }
-  inline void setCount(unsigned c) {this->setValue(c); }
+  inline void setCount(unsigned int c) {this->setValue(c); }
 
 };
 
@@ -82,8 +82,10 @@ public:
   virtual CountingOcTree* create() const {return new CountingOcTree(resolution); }
   virtual std::string getTreeType() const {return "CountingOcTree";}
 
-  virtual CountingOcTreeNode* updateNode(const octomap::point3d& value);
-  CountingOcTreeNode* updateNode(const octomap::OcTreeKey& k);
+  virtual CountingOcTreeNode* updateNode(const octomap::point3d& p);
+  virtual CountingOcTreeNode* updateNode(const octomap::OcTreeKey& k);
+  virtual CountingOcTreeNode* setNodeCount(const octomap::point3d& p, unsigned int count);
+  virtual CountingOcTreeNode* setNodeCount(const octomap::OcTreeKey& k, unsigned int count);
   void getCentersMinHits(octomap::point3d_list& node_centers, unsigned int min_hits) const;
   bool computeStatistics(double &mean, double &variance) const;
 

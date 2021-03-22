@@ -44,55 +44,108 @@ CountingOcTreeNode::CountingOcTreeNode()
 {
 }
 
-CountingOcTreeNode::~CountingOcTreeNode() {
-
+CountingOcTreeNode::~CountingOcTreeNode()
+{
 }
 
 /// implementation of CountingOcTree  --------------------------------------
 CountingOcTree::CountingOcTree(double in_resolution)
- : octomap::OcTreeBase<CountingOcTreeNode>(in_resolution) {
-    countingOcTreeMemberInit.ensureLinking();
- }
+ : octomap::OcTreeBase<CountingOcTreeNode>(in_resolution)
+{
+  countingOcTreeMemberInit.ensureLinking();
+}
 
-CountingOcTreeNode* CountingOcTree::updateNode(const octomap::point3d& value) {
-
+CountingOcTreeNode* CountingOcTree::updateNode(const octomap::point3d& p)
+{
   octomap::OcTreeKey key;
-  if (!coordToKeyChecked(value, key)) return NULL;
+  if (!coordToKeyChecked(p, key)) return NULL;
   return updateNode(key);
 }
 
 
 // Note: do not inline this method, will decrease speed (KMW)
-CountingOcTreeNode* CountingOcTree::updateNode(const octomap::OcTreeKey& k) {
-
-  if (root == NULL) {
+CountingOcTreeNode* CountingOcTree::updateNode(const octomap::OcTreeKey& k)
+{
+  if (root == NULL)
+  {
     root = new CountingOcTreeNode();
     tree_size++;
   }
   CountingOcTreeNode* curNode (root);
   curNode->increaseCount();
 
-
   // follow or construct nodes down to last level...
-  for (int i=(tree_depth-1); i>=0; i--) {
-
+  for (int i=(tree_depth-1); i>=0; i--)
+  {
     unsigned int pos = computeChildIdx(k, i);
 
     // requested node does not exist
-    if (!nodeChildExists(curNode, pos)) {
-      createNodeChild(curNode, pos);
+    if (!nodeChildExists(curNode, pos))
+    {
+      curNode = createNodeChild(curNode, pos);
     }
-    // descent tree
-    curNode = getNodeChild(curNode, pos);
+    else // descent tree
+    {
+      curNode = getNodeChild(curNode, pos);
+    }
     curNode->increaseCount(); // modify traversed nodes
   }
 
   return curNode;
 }
 
+CountingOcTreeNode* CountingOcTree::setNodeCount(const octomap::point3d& p, unsigned int count)
+{
+  octomap::OcTreeKey key;
+  if (!coordToKeyChecked(p, key)) return NULL;
+  return setNodeCount(key, count);
+}
 
-void CountingOcTree::getCentersMinHits(octomap::point3d_list& node_centers, unsigned int min_hits) const {
+CountingOcTreeNode* CountingOcTree::setNodeCount(const octomap::OcTreeKey& k, unsigned int count)
+{
+  if (root == NULL)
+  {
+    root = new CountingOcTreeNode();
+    tree_size++;
+  }
 
+  std::vector<CountingOcTreeNode*> nodes;
+  nodes.reserve(tree_depth);
+  CountingOcTreeNode* curNode (root);
+  nodes.push_back(curNode);
+
+  // follow or construct nodes down to last level...
+  for (int i=(tree_depth-1); i>=0; i--)
+  {
+    unsigned int pos = computeChildIdx(k, i);
+
+    // requested node does not exist
+    if (!nodeChildExists(curNode, pos))
+    {
+      curNode = createNodeChild(curNode, pos);
+    }
+    else // descent tree
+    {
+      curNode = getNodeChild(curNode, pos);
+    }
+    nodes.push_back(curNode);
+  }
+
+  unsigned int count_before = curNode->getCount();
+  curNode->setCount(count); // set count for last node
+  int diff = (int)count - (int)count_before;
+
+  // traverse back to update parent nodes accordingly
+  for (int i = nodes.size()-2; i >= 0; i--)
+  {
+    nodes[i]->setCount(nodes[i]->getCount() + diff);
+  }
+
+  return curNode;
+}
+
+void CountingOcTree::getCentersMinHits(octomap::point3d_list& node_centers, unsigned int min_hits) const
+{
   octomap::OcTreeKey root_key;
   root_key[0] = root_key[1] = root_key[2] = this->tree_max_val;
   getCentersMinHitsRecurs(node_centers, min_hits, this->tree_depth, this->root, 0, root_key);
@@ -103,24 +156,26 @@ void CountingOcTree::getCentersMinHitsRecurs( octomap::point3d_list& node_center
                                               unsigned int& min_hits,
                                               unsigned int max_depth,
                                               CountingOcTreeNode* node, unsigned int depth,
-                                              const octomap::OcTreeKey& parent_key) const {
-
-  if (depth < max_depth && nodeHasChildren(node)) {
-
+                                              const octomap::OcTreeKey& parent_key) const
+{
+  if (depth < max_depth && nodeHasChildren(node))
+  {
     octomap::key_type center_offset_key = this->tree_max_val >> (depth + 1);
     octomap::OcTreeKey search_key;
 
-    for (unsigned int i=0; i<8; ++i) {
-      if (nodeChildExists(node,i)) {
+    for (unsigned int i=0; i<8; ++i)
+    {
+      if (nodeChildExists(node,i))
+      {
         computeChildKey(i, center_offset_key, parent_key, search_key);
         getCentersMinHitsRecurs(node_centers, min_hits, max_depth, getNodeChild(node,i), depth+1, search_key);
       }
     }
   }
-
-  else { // max level reached
-
-    if (node->getCount() >= min_hits) {
+  else // max level reached
+  {
+    if (node->getCount() >= min_hits)
+    {
       node_centers.push_back(this->keyToCoord(parent_key, depth));
     }
   }
@@ -147,4 +202,4 @@ bool CountingOcTree::computeStatistics(double &mean, double &variance) const
 
 CountingOcTree::StaticMemberInitializer CountingOcTree::countingOcTreeMemberInit;
 
-}
+} // namespace octomap_vpp

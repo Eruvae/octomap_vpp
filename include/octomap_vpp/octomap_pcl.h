@@ -76,6 +76,25 @@ typename pcl::PointCloud<PointT>::Ptr octomapToPcl(const TREE &tree, bool (*isOc
   return pc_out;
 }
 
+template<typename TREE, typename PointT>
+void pclToOctomap(TREE &tree, const pcl::PointCloud<PointT> &pc, void (*updateNode)(TREE &tree, const octomap::point3d &p))
+{
+  for (const PointT &p : pc)
+  {
+    updateNode(tree, pclPointToOctomap<PointT>(p));
+  }
+}
+
+template<typename TREE, typename PointT>
+void pclIndicesToOctomap(TREE &tree, const pcl::PointCloud<PointT> &pc, const pcl::PointIndices &inds, void (*updateNode)(TREE &tree, const octomap::point3d &p))
+{
+  for (const int &i : inds.indices)
+  {
+    const PointT &p = pc.at(i);
+    updateNode(tree, pclPointToOctomap<PointT>(p));
+  }
+}
+
 } // namespace octomap_vpp
 
 #endif // OCTOMAP_PCL_H
