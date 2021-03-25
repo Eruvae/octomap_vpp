@@ -48,6 +48,8 @@ const int nbLut [26][3] = {
   {1, 1, 1}
 };
 
+const int nbCoordDiff [26] = {1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3};
+
 // Old separate LUTs, currently kept for backwards compatibility
 
 const int nb6Lut [6][3] = {
