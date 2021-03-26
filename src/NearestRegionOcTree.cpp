@@ -78,7 +78,7 @@ std::shared_ptr<NearestRegionOcTree> NearestRegionOcTree::createFromCountringOct
 
   for (auto it = in_tree.begin_leafs(), end = in_tree.end_leafs(); it != end; it++)
   {
-    ValueHeap::handle_type handle = nodeVals.push(KeyWithRegInf(it.getKey(), it->getCount(), 0.f));
+    ValueHeap::handle_type handle = nodeVals.push(KeyWithRegInf(it.getKey(), it->getCount(), 0));
     openKeys[it.getKey()] = handle;
   }
 
@@ -162,8 +162,7 @@ NearestRegionOcTreeNode *NearestRegionOcTree::updateNode(const octomap::OcTreeKe
     nodes.push_back(curNode);
   }
 
-  const RegionInfo &oldRegInf = curNode->getValue();
-  if (regInf != oldRegInf)
+  if (regInf != curNode->getValue())
   {
     curNode->setValue(regInf);
     // traverse back to update parent nodes accordingly
