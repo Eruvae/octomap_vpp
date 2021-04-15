@@ -88,6 +88,7 @@ public:
   virtual CountingOcTreeNode* setNodeCount(const octomap::OcTreeKey& k, unsigned int count);
   void getCentersMinHits(octomap::point3d_list& node_centers, unsigned int min_hits) const;
   bool computeStatistics(double &mean, double &variance) const;
+  unsigned int getMaxCount() const;
 
 protected:
 

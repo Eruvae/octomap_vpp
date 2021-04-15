@@ -186,7 +186,7 @@ bool CountingOcTree::computeStatistics(double &mean, double &variance) const
   double count = 0;
   mean = 0;
   double M2 = 0;
-  for(auto it = begin_leafs(), end=end_leafs(); it != end; ++it)
+  for(auto it=begin_leafs(), end=end_leafs(); it != end; ++it)
   {
     double newValue = it->getCount();
     count++;
@@ -198,6 +198,17 @@ bool CountingOcTree::computeStatistics(double &mean, double &variance) const
   if (count < 2) return false;
   variance = M2 / (count - 1);
   return true;
+}
+
+unsigned int CountingOcTree::getMaxCount() const
+{
+  unsigned int max = 0;
+  for(auto it = begin_leafs(), end=end_leafs(); it != end; ++it)
+  {
+    if (it->getCount() > max)
+      max = it->getCount();
+  }
+  return max;
 }
 
 CountingOcTree::StaticMemberInitializer CountingOcTree::countingOcTreeMemberInit;
