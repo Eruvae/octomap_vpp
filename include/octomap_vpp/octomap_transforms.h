@@ -28,6 +28,11 @@ inline static octomath::Vector3 vectorToOctomath(const geometry_msgs::Vector3 &v
   return octomath::Vector3(vec.x, vec.y, vec.z);
 }
 
+inline static octomap::point3d pointToOctomath(const geometry_msgs::Point &p)
+{
+  return octomap::point3d(p.x, p.y, p.z);
+}
+
 inline static octomath::Quaternion quaternionToOctomath(const geometry_msgs::Quaternion &quat)
 {
   return octomath::Quaternion(quat.w, quat.x, quat.y, quat.z);
