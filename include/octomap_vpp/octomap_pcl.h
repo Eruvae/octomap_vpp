@@ -1,10 +1,12 @@
 #ifndef OCTOMAP_PCL_H
 #define OCTOMAP_PCL_H
 
+#include <functional>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/surface/convex_hull.h>
 #include <octomap/octomap_types.h>
+#include <octomap/OcTreeKey.h>
 #include <octomap/Pointcloud.h>
 
 namespace octomap_vpp
@@ -46,6 +48,30 @@ typename pcl::PointCloud<PointT>::Ptr octomapPointCollectionToPcl(const octomap:
   for (const octomap::point3d &p : pc)
   {
     pc_out->push_back(octomapPointToPcl<PointT>(p));
+  }
+  return pc_out;
+}
+
+template<typename PointT>
+typename pcl::PointCloud<PointT>::Ptr octomapPointListToPcl(const octomap::point3d_list &pc)
+{
+  typename pcl::PointCloud<PointT>::Ptr pc_out(new pcl::PointCloud<PointT>);
+  pc_out->reserve(pc.size());
+  for (const octomap::point3d &p : pc)
+  {
+    pc_out->push_back(octomapPointToPcl<PointT>(p));
+  }
+  return pc_out;
+}
+
+template<typename PointT>
+typename pcl::PointCloud<PointT>::Ptr octomapKeysetToPcl(const octomap::KeySet &keys, std::function<octomap::point3d(const octomap::OcTreeKey&)> keyToCoord)
+{
+  typename pcl::PointCloud<PointT>::Ptr pc_out(new pcl::PointCloud<PointT>);
+  pc_out->reserve(keys.size());
+  for (const octomap::OcTreeKey &key : keys)
+  {
+    pc_out->push_back(octomapPointToPcl<PointT>(keyToCoord(key)));
   }
   return pc_out;
 }
