@@ -43,6 +43,11 @@ inline static octomath::Pose6D transformToOctomath(const geometry_msgs::Transfor
   return octomath::Pose6D(vectorToOctomath(transform.translation), quaternionToOctomath(transform.rotation));
 }
 
+inline static octomath::Pose6D poseToOctomath(const geometry_msgs::Pose &pose)
+{
+  return octomath::Pose6D(pointToOctomath(pose.position), quaternionToOctomath(pose.orientation));
+}
+
 } // namespace octomap_vpp
 
 #endif // OCTOMAP_TRANSFORMS_H
