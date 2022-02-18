@@ -44,7 +44,7 @@ void RoiOcTreeNode::addRoiValue(const float& logOdds)
   roiValue += logOdds;
 }
 
-RoiOcTree::RoiOcTree(double resolution) : octomap::OccupancyOcTreeBase <RoiOcTreeNode>(resolution), roi_prob_thres_log(1)
+RoiOcTree::RoiOcTree(double resolution) : octomap::OccupancyOcTreeBase <RoiOcTreeNode>(resolution), roi_prob_thres_log(FLT_MIN)
 {
   ocTreeMemberInit.ensureLinking();
 }
