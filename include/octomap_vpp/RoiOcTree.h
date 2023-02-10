@@ -432,6 +432,28 @@ public:
     return value;
   }
 
+  struct CoverageInfo
+  {
+    size_t covered_cells;
+    size_t total_cells;
+  };
+
+  CoverageInfo getVolumeCoverage(const octomap::OcTreeKey &min, const octomap::OcTreeKey &max)
+  {
+    size_t total_cells = (max[0] - min[0]) * (max[1] - min[1]) * (max[2] - min[2]);
+    size_t covered_cells = 0;
+    for (auto it = begin_leafs_bbx(min, max), end = end_leafs_bbx(); it != end; it++)
+    {
+      if (it->getLogOdds() != 0) covered_cells++;
+    }
+    return {covered_cells, total_cells};
+  }
+
+  CoverageInfo getVolumeCoverage(const octomap::point3d &min, const octomap::point3d &max)
+  {
+    return getVolumeCoverage(coordToKey(min), coordToKey(max));
+  }
+
 
 protected:
   float roi_prob_thres_log;
