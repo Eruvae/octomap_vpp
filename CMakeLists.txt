@@ -136,7 +136,7 @@ add_definitions(
 # add_library(${PROJECT_NAME}
 #   src/${PROJECT_NAME}/octomap_vpp.cpp
 # )
-add_library(${PROJECT_NAME} src/RoiOcTree.cpp src/InflatedRoiOcTree.cpp src/CountingOcTree.cpp src/WorkspaceOcTree.cpp src/NearestRegionOcTree.cpp)
+add_library(${PROJECT_NAME} src/RoiOcTree.cpp src/InflatedRoiOcTree.cpp src/CountingOcTree.cpp src/WorkspaceOcTree.cpp src/NearestRegionOcTree.cpp src/SemanticOcTree.cpp)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
