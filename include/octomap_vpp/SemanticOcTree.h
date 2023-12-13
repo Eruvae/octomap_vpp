@@ -19,9 +19,9 @@ class SemanticOcTreeNode : public octomap::OcTreeNode
   friend class SemanticOcTree;
 
 public:
-  SemanticOcTreeNode() : OcTreeNode() {}
+  SemanticOcTreeNode() : OcTreeNode(), new_class_log_odds(0) {}
 
-  SemanticOcTreeNode(const SemanticOcTreeNode& rhs) : OcTreeNode(rhs), classProbs(rhs.classProbs) {}
+  SemanticOcTreeNode(const SemanticOcTreeNode& rhs) : OcTreeNode(rhs), new_class_log_odds(rhs.new_class_log_odds), classProbs(rhs.classProbs) {}
 
   bool operator==(const SemanticOcTreeNode& rhs) const{
     return (rhs.value == value && rhs.classProbs == classProbs);
@@ -36,7 +36,38 @@ public:
 
   std::istream& readData(std::istream &s);
 
-  // -- node roi value  ----------------------------
+  // -- node class value  ----------------------------
+
+  inline uint8_t getMostLikelyClassID() const
+  {
+    uint8_t class_id = -1;
+    float max_log_odds = -std::numeric_limits<float>::infinity();
+    for (auto it = classProbs.begin(); it != classProbs.end(); it++)
+    {
+      if (it->second > max_log_odds)
+      {
+        max_log_odds = it->second;
+        class_id = it->first;
+      }
+    }
+    return class_id;
+  }
+
+  inline void registerClassHit(uint8_t class_id)
+  {
+    auto el = classProbs.find(class_id);
+    if (el == classProbs.end())
+    {
+      el = classProbs.insert({class_id, new_class_log_odds}).first;
+    }
+    el->second = std::min(el->second + CLASS_LO_HIT, CLASS_LO_MAX);
+    for (auto it = classProbs.begin(); it != classProbs.end(); it++)
+    {
+      if (it->first != class_id)
+        it->second = std::max(it->second + CLASS_LO_MISS, CLASS_LO_MIN);
+    }
+    new_class_log_odds = std::max(new_class_log_odds + CLASS_LO_MISS, CLASS_LO_MIN);
+  }
 
   /// \return class probability of node
   inline double getClassProb(uint8_t class_id) const
@@ -45,7 +76,7 @@ public:
     if (it != classProbs.end())
       return octomap::probability(it->second);
     else
-      return 0;
+      return octomap::probability(new_class_log_odds);
   }
 
   /// \return log odds representation of class probability of node
@@ -55,7 +86,18 @@ public:
     if (it != classProbs.end())
       return it->second;
     else
-      return -std::numeric_limits<float>::infinity();
+      return new_class_log_odds;
+  }
+
+  /// sets class of node
+  inline void setNodeClass(uint8_t class_id)
+  {
+    for (auto it = classProbs.begin(); it != classProbs.end(); it++)
+    {
+      it->second = CLASS_LO_MIN;
+    }
+    classProbs[class_id] = CLASS_LO_MAX;
+    new_class_log_odds = CLASS_LO_MIN;
   }
 
   /// sets class log odds of node
@@ -87,14 +129,13 @@ public:
     }
   }
 
-  /// adds to the node's class logOdds value (with no boundary / threshold checking!)
-  void addClassLogOdds(uint8_t class_id, float log_odds)
-  {
-    classProbs[class_id] += log_odds;
-  }
-
 protected:
-  uint8_t num_classes;
+  static constexpr float CLASS_LO_MAX = 3.5;
+  static constexpr float CLASS_LO_MIN = -2;
+  static constexpr float CLASS_LO_HIT = 0.85;
+  static constexpr float CLASS_LO_MISS = -0.4;
+
+  float new_class_log_odds;
   std::unordered_map<uint8_t, float> classProbs;
 };
 
@@ -152,6 +193,10 @@ public:
     }
     return class_id;
   }
+
+  SemanticOcTreeNode* setNodeClass(const octomap::OcTreeKey &key, uint8_t class_id, bool lazy_eval = false);
+  SemanticOcTreeNode* setNodeClass(const octomap::point3d &value, uint8_t class_id, bool lazy_eval = false);
+  SemanticOcTreeNode* setNodeClass(double x, double y, double z, uint8_t class_id, bool lazy_eval = false);
 
   inline float keyToLogOdds(const octomap::OcTreeKey &key)
   {

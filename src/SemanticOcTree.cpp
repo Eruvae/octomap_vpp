@@ -96,6 +96,40 @@ std::ostream& SemanticOcTree::writeData(std::ostream& s) const
   return s;
 }
 
+SemanticOcTreeNode* setNodeClass(const octomap::OcTreeKey &key, uint8_t class_id, bool lazy_eval = false);
+  SemanticOcTreeNode* setNodeClass(const octomap::point3d &value, uint8_t class_id, bool lazy_eval = false);
+  SemanticOcTreeNode* setNodeClass(double x, double y, double z, uint8_t class_id, bool lazy_eval = false);
+
+SemanticOcTreeNode* SemanticOcTree::setNodeClass(const octomap::OcTreeKey &key, uint8_t class_id, bool lazy_eval)
+{
+  bool createdRoot = false;
+  if (this->root == NULL){
+    this->root = new SemanticOcTreeNode();
+    this->tree_size++;
+    createdRoot = true;
+  }
+
+  return updateNodeClassRecurs(this->root, createdRoot, key, 0, class_id, this->prob_hit_log, lazy_eval);
+}
+
+SemanticOcTreeNode* SemanticOcTree::setNodeClass(const octomap::point3d &value, uint8_t class_id, bool lazy_eval)
+{
+  octomap::OcTreeKey key;
+  if (!this->coordToKeyChecked(value, key))
+    return NULL;
+
+  return setNodeClass(key, class_id, lazy_eval);
+}
+
+SemanticOcTreeNode* SemanticOcTree::setNodeClass(double x, double y, double z, uint8_t class_id, bool lazy_eval)
+{
+  octomap::OcTreeKey key;
+  if (!this->coordToKeyChecked(x, y, z, key))
+    return NULL;
+
+  return setNodeClass(key, class_id, lazy_eval);
+}
+
 SemanticOcTreeNode* SemanticOcTree::updateNodeClass(const octomap::OcTreeKey& key, uint8_t class_id,
                                                     float log_odds_update, bool lazy_eval)
 {
@@ -190,5 +224,7 @@ SemanticOcTreeNode* SemanticOcTree::updateNodeClassRecurs(SemanticOcTreeNode* no
 void SemanticOcTree::updateNodeClassLogOdds(SemanticOcTreeNode* node, const float& update) const
 {
 }
+
+SemanticOcTree::StaticMemberInitializer SemanticOcTree::ocTreeMemberInit;
 
 }  // namespace octomap_vpp
