@@ -127,7 +127,7 @@ SemanticOcTreeNode* SemanticOcTree::setNodeClass(const octomap::OcTreeKey &key, 
     createdRoot = true;
   }
 
-  return updateNodeClassRecurs(this->root, createdRoot, key, 0, class_id, this->prob_hit_log, lazy_eval);
+  return updateNodeClassRecurs(this->root, createdRoot, key, 0, class_id, lazy_eval);
 }
 
 SemanticOcTreeNode* SemanticOcTree::setNodeClass(const octomap::point3d &value, uint8_t class_id, bool lazy_eval)
@@ -148,15 +148,13 @@ SemanticOcTreeNode* SemanticOcTree::setNodeClass(double x, double y, double z, u
   return setNodeClass(key, class_id, lazy_eval);
 }
 
-SemanticOcTreeNode* SemanticOcTree::updateNodeClass(const octomap::OcTreeKey& key, uint8_t class_id,
-                                                    float log_odds_update, bool lazy_eval)
+SemanticOcTreeNode* SemanticOcTree::updateNodeClass(const octomap::OcTreeKey& key, uint8_t class_id, bool lazy_eval)
 {
   // early abort (no change will happen).
   // may cause an overhead in some configuration, but more often helps
   SemanticOcTreeNode* leaf = this->search(key);
   // no change: node already at threshold
-  if (leaf && ((log_odds_update >= 0 && leaf->getClassLogOdds(class_id) >= this->clamping_thres_max) ||
-               (log_odds_update <= 0 && leaf->getClassLogOdds(class_id) <= this->clamping_thres_min)))
+  if (leaf && (leaf->getClassLogOdds(class_id) >= this->clamping_thres_max))
   {
     return leaf;
   }
@@ -170,17 +168,12 @@ SemanticOcTreeNode* SemanticOcTree::updateNodeClass(const octomap::OcTreeKey& ke
     createdRoot = true;
   }
 
-  return updateNodeClassRecurs(this->root, createdRoot, key, 0, class_id, log_odds_update, lazy_eval);
-}
-
-SemanticOcTreeNode* SemanticOcTree::updateNodeClass(const octomap::OcTreeKey& key, uint8_t class_id, bool lazy_eval)
-{
-  return updateNodeClass(key, class_id, this->prob_hit_log, lazy_eval);
+  return updateNodeClassRecurs(this->root, createdRoot, key, 0, class_id, lazy_eval);
 }
 
 SemanticOcTreeNode* SemanticOcTree::updateNodeClassRecurs(SemanticOcTreeNode* node, bool node_just_created,
                                                           const octomap::OcTreeKey& key, unsigned int depth,
-                                                          uint8_t class_id, float log_odds_update, bool lazy_eval)
+                                                          uint8_t class_id, bool lazy_eval)
 {
   bool created_node = false;
 
@@ -208,12 +201,11 @@ SemanticOcTreeNode* SemanticOcTree::updateNodeClassRecurs(SemanticOcTreeNode* no
     }
 
     if (lazy_eval)
-      return updateNodeClassRecurs(this->getNodeChild(node, pos), created_node, key, depth + 1, class_id, log_odds_update,
-                                 lazy_eval);
+      return updateNodeClassRecurs(this->getNodeChild(node, pos), created_node, key, depth + 1, class_id, lazy_eval);
     else
     {
       SemanticOcTreeNode* retval =
-          updateNodeClassRecurs(this->getNodeChild(node, pos), created_node, key, depth + 1, class_id, log_odds_update, lazy_eval);
+          updateNodeClassRecurs(this->getNodeChild(node, pos), created_node, key, depth + 1, class_id, lazy_eval);
       // prune node if possible, otherwise set own probability
       // note: combining both did not lead to a speedup!
       if (this->pruneNode(node))
@@ -233,14 +225,9 @@ SemanticOcTreeNode* SemanticOcTree::updateNodeClassRecurs(SemanticOcTreeNode* no
   // at last level, update node, end of recursion
   else
   {
-    // TODO
-    //updateNodeClassLogOdds(node, log_odds_update);
+    node->registerClassHit(class_id);
     return node;
   }
-}
-
-void SemanticOcTree::updateNodeClassLogOdds(SemanticOcTreeNode* node, const float& update) const
-{
 }
 
 SemanticOcTree::StaticMemberInitializer SemanticOcTree::ocTreeMemberInit;

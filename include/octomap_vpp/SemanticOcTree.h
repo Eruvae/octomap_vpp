@@ -158,13 +158,9 @@ public:
 
   void insertLabeledPointcloud(const pcl::PointCloud<pcl::PointXYZL> &cloud);
 
-  SemanticOcTreeNode* updateNodeClass(const octomap::OcTreeKey& key, uint8_t class_id, float log_odds_update, bool lazy_eval);
-
   SemanticOcTreeNode* updateNodeClass(const octomap::OcTreeKey& key, uint8_t class_id, bool lazy_eval);
 
-  SemanticOcTreeNode* updateNodeClassRecurs(SemanticOcTreeNode* node, bool node_just_created, const octomap::OcTreeKey& key, unsigned int depth, uint8_t class_id, float log_odds_update, bool lazy_eval);
-
-  void updateNodeClassLogOdds(SemanticOcTreeNode* node, const float& update) const;
+  SemanticOcTreeNode* updateNodeClassRecurs(SemanticOcTreeNode* node, bool node_just_created, const octomap::OcTreeKey& key, unsigned int depth, uint8_t class_id, bool lazy_eval);
 
   /// queries the node's most likely class
   inline int getNodeClass(const SemanticOcTreeNode *node) const{
