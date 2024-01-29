@@ -8,6 +8,8 @@
 #include <octomap/OcTreeKey.h>
 #include <queue>
 #include <memory>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
 
 #include "roioctree_utils.h"
 
@@ -154,7 +156,7 @@ public:
   // override default to write class labels
   std::ostream& writeData(std::ostream &s) const override;
 
-  //void insertRegionScan(const octomap::Pointcloud &regionPoints, const octomap::Pointcloud &offRegionPoints);
+  void insertLabeledPointcloud(const pcl::PointCloud<pcl::PointXYZL> &cloud);
 
   SemanticOcTreeNode* updateNodeClass(const octomap::OcTreeKey& key, uint8_t class_id, float log_odds_update, bool lazy_eval);
 

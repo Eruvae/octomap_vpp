@@ -1,5 +1,7 @@
 #include "octomap_vpp/SemanticOcTree.h"
 
+#include "octomap_vpp/octomap_pcl.h"
+
 namespace octomap_vpp
 {
 
@@ -96,9 +98,25 @@ std::ostream& SemanticOcTree::writeData(std::ostream& s) const
   return s;
 }
 
-SemanticOcTreeNode* setNodeClass(const octomap::OcTreeKey &key, uint8_t class_id, bool lazy_eval = false);
-  SemanticOcTreeNode* setNodeClass(const octomap::point3d &value, uint8_t class_id, bool lazy_eval = false);
-  SemanticOcTreeNode* setNodeClass(double x, double y, double z, uint8_t class_id, bool lazy_eval = false);
+void SemanticOcTree::insertLabeledPointcloud(const pcl::PointCloud<pcl::PointXYZL> &cloud)
+{
+  octomap::Pointcloud octomap_cloud = octomap_vpp::pclPointcloudToOctomap(cloud);
+  octomap::point3d sensor_origin = octomap::point3d(cloud.sensor_origin_.x(), cloud.sensor_origin_.y(), cloud.sensor_origin_.z());
+  insertPointCloud(octomap_cloud, sensor_origin);
+  std::unordered_map<uint8_t, octomap::KeySet> class_points;
+  for (auto &p : cloud.points)
+  {
+    octomap::point3d point  = octomap_vpp::pclPointToOctomap(p);
+    class_points[p.label].insert(coordToKey(point));
+  }
+  for (auto &pair : class_points)
+  {
+    for (const octomap::OcTreeKey &key : pair.second)
+    {
+      SemanticOcTreeNode* node = updateNodeClass(key, pair.first, false);
+    }
+  }
+}
 
 SemanticOcTreeNode* SemanticOcTree::setNodeClass(const octomap::OcTreeKey &key, uint8_t class_id, bool lazy_eval)
 {
